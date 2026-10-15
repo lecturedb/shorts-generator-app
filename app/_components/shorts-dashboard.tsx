@@ -1,0 +1,304 @@
+"use client";
+
+import Image from "next/image";
+import { useState } from "react";
+
+import sampleProject from "@/fixtures/ui/sample-project.json";
+
+type IconName =
+  | "audio"
+  | "chevron"
+  | "close"
+  | "document"
+  | "edit"
+  | "folder"
+  | "grid"
+  | "home"
+  | "image"
+  | "menu"
+  | "more"
+  | "music"
+  | "play"
+  | "plus"
+  | "save"
+  | "search"
+  | "settings"
+  | "sparkles"
+  | "video"
+  | "wand";
+
+type PanelContext = "file" | "step";
+
+const stepIcons: Record<string, IconName> = {
+  script: "document",
+  image: "image",
+  video: "video",
+  voice: "audio",
+  music: "music",
+  editing: "wand",
+};
+
+const fileGroups = [
+  { label: "프로젝트 정보", fileIds: ["sample-project-json"] },
+  { label: "01 대본", fileIds: ["sample-script"] },
+  { label: "02 이미지", fileIds: ["sample-image"] },
+  { label: "03 영상", fileIds: ["sample-video"] },
+  { label: "04 더빙", fileIds: ["sample-voice"] },
+  { label: "05 음악", fileIds: ["sample-music"] },
+  { label: "06 편집", fileIds: ["sample-output"] },
+] as const;
+
+const previewDetails: Record<string, { path: string; format: string; meta: string }> = {
+  "sample-project-json": { path: "프로젝트 / project.json", format: "JSON", meta: "UI 샘플 데이터" },
+  "sample-script": { path: "01 대본 / script.json", format: "JSON", meta: "장면 3개" },
+  "sample-image": { path: "02 이미지 / scene-01.png", format: "PNG", meta: "360 × 640" },
+  "sample-video": { path: "03 영상 / clip-01.mp4", format: "MP4 · H.264", meta: "00:02 · 360 × 640" },
+  "sample-voice": { path: "04 더빙 / narration.mp3", format: "MP3", meta: "00:02 · 모노" },
+  "sample-music": { path: "05 음악 / background.mp3", format: "MP3", meta: "00:02 · 모노" },
+  "sample-output": { path: "06 편집 / final.mp4", format: "MP4 · H.264", meta: "샘플 결과" },
+};
+
+function Icon({ name, className = "h-5 w-5" }: { name: IconName; className?: string }) {
+  const common = {
+    fill: "none",
+    stroke: "currentColor",
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    strokeWidth: 1.8,
+  };
+
+  return (
+    <svg aria-hidden="true" className={className} viewBox="0 0 24 24" {...common}>
+      {name === "home" && <><path d="m3 11 9-8 9 8" /><path d="M5 10v10h14V10M9 20v-6h6v6" /></>}
+      {name === "folder" && <path d="M3 6.5h6l2 2h10v10.5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />}
+      {name === "grid" && <><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></>}
+      {name === "settings" && <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21h-4v-.09A1.7 1.7 0 0 0 8.95 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.57-1H3v-4h.09A1.7 1.7 0 0 0 4.6 8.95a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6 1.7 1.7 0 0 0 10 3.03V3h4v.09A1.7 1.7 0 0 0 15.05 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.14.61.68 1.03 1.31 1.03H21v4h-.09A1.7 1.7 0 0 0 19.4 15Z" /></>}
+      {name === "search" && <><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></>}
+      {name === "plus" && <path d="M12 5v14M5 12h14" />}
+      {name === "chevron" && <path d="m8 9 4 4 4-4" />}
+      {name === "menu" && <path d="M4 7h16M4 12h16M4 17h16" />}
+      {name === "close" && <path d="m6 6 12 12M18 6 6 18" />}
+      {name === "document" && <><path d="M6 3h9l3 3v15H6Z" /><path d="M14 3v4h4M9 11h6M9 15h6" /></>}
+      {name === "image" && <><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="9" cy="10" r="2" /><path d="m5 18 5-5 3 3 2-2 4 4" /></>}
+      {name === "video" && <><rect x="3" y="5" width="14" height="14" rx="2" /><path d="m17 10 4-2v8l-4-2ZM8 9l4 3-4 3Z" /></>}
+      {name === "audio" && <><rect x="9" y="3" width="6" height="12" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6" /></>}
+      {name === "music" && <><path d="M9 18V6l10-2v12" /><circle cx="6" cy="18" r="3" /><circle cx="16" cy="16" r="3" /></>}
+      {name === "wand" && <><path d="m4 20 11-11M13 5l1-2 1 2 2 1-2 1-1 2-1-2-2-1ZM18 12l.8-1.5.7 1.5 1.5.7-1.5.8L18 16l-.7-1.5-1.5-.8 1.5-.7Z" /><path d="m6 14 4 4" /></>}
+      {name === "edit" && <><path d="m4 20 4.5-1 10-10-3.5-3.5-10 10Z" /><path d="m13.5 7 3.5 3.5" /></>}
+      {name === "save" && <><path d="M4 4h14l2 2v14H4Z" /><path d="M8 4v6h8V4M8 20v-6h8v6" /></>}
+      {name === "play" && <path d="m9 7 8 5-8 5Z" />}
+      {name === "more" && <><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none" /></>}
+      {name === "sparkles" && <><path d="m12 3 1.2 3.8L17 8l-3.8 1.2L12 13l-1.2-3.8L7 8l3.8-1.2ZM18 14l.7 2.3L21 17l-2.3.7L18 20l-.7-2.3L15 17l2.3-.7Z" /></>}
+    </svg>
+  );
+}
+
+function StatusMark({ status, compact = false }: { status: string; compact?: boolean }) {
+  if (status === "완료") {
+    return <span className={`inline-flex shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white ${compact ? "h-5 w-5 text-xs" : "h-6 w-6 text-sm"}`} aria-label="완료">✓</span>;
+  }
+  if (status === "실행 중") {
+    return <span className={`status-spinner shrink-0 rounded-full border-2 border-violet-200 border-t-violet-600 ${compact ? "h-5 w-5" : "h-6 w-6"}`} aria-label="실행 중" />;
+  }
+  if (status === "실패") {
+    return <span className={`inline-flex shrink-0 items-center justify-center rounded-full bg-rose-100 font-bold text-rose-600 ${compact ? "h-5 w-5 text-xs" : "h-6 w-6 text-sm"}`} aria-label="실패">!</span>;
+  }
+  return <span className={`shrink-0 rounded-full border-2 border-slate-300 bg-white ${compact ? "h-5 w-5" : "h-6 w-6"}`} aria-label="대기" />;
+}
+
+function statusTextClass(status: string) {
+  if (status === "완료") return "text-emerald-600";
+  if (status === "실행 중") return "text-violet-600";
+  if (status === "실패") return "text-rose-600";
+  return "text-slate-500";
+}
+
+function fileIcon(kind: string): IconName {
+  if (kind === "image") return "image";
+  if (kind === "video") return "video";
+  if (kind === "audio") return "audio";
+  return "document";
+}
+
+function SidebarContent({ collapsed, onCollapse, onFileSelect, selectedFileId }: { collapsed: boolean; onCollapse: () => void; onFileSelect: (fileId: string) => void; selectedFileId: string }) {
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-white">
+      <div className={`relative flex h-20 shrink-0 items-center border-b border-slate-100 ${collapsed ? "justify-center px-3" : "justify-between px-5"}`}>
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-indigo-700 text-white shadow-[0_8px_18px_rgba(109,40,217,0.24)]"><Icon name="play" className="h-6 w-6" /></span>
+          {!collapsed && <span className="truncate text-[17px] font-extrabold tracking-tight text-slate-950">Shorts Studio</span>}
+        </div>
+        {collapsed ? (
+          <button type="button" onClick={onCollapse} className="absolute -right-3 top-[62px] z-20 hidden h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-base font-bold text-slate-500 shadow-sm transition hover:border-violet-200 hover:text-violet-700 lg:inline-flex" aria-label="사이드바 펼치기" title="사이드바 펼치기">»</button>
+        ) : (
+          <button type="button" onClick={onCollapse} className="hidden h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 lg:inline-flex" aria-label="사이드바 접기" title="사이드바 접기"><span className="text-xl leading-none">«</span></button>
+        )}
+      </div>
+
+      <nav className={`shrink-0 space-y-1.5 ${collapsed ? "p-3" : "px-4 py-4"}`} aria-label="주요 메뉴">
+        <button type="button" className={`flex w-full items-center rounded-xl text-sm font-semibold text-slate-600 transition hover:bg-slate-50 ${collapsed ? "h-11 justify-center" : "h-11 gap-3 px-3"}`} aria-label="홈"><Icon name="home" />{!collapsed && <span>홈</span>}</button>
+        <button type="button" className={`flex w-full items-center rounded-xl bg-violet-600 text-sm font-bold text-white shadow-[0_7px_16px_rgba(124,58,237,0.18)] ${collapsed ? "h-11 justify-center" : "h-11 gap-3 px-3"}`} aria-current="page" aria-label="프로젝트"><Icon name="folder" />{!collapsed && <span>프로젝트</span>}</button>
+      </nav>
+
+      {!collapsed && (
+        <>
+          <div className="flex shrink-0 gap-2 px-4 pb-3">
+            <label className="relative min-w-0 flex-1">
+              <span className="sr-only">프로젝트 검색</span>
+              <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input readOnly value="" placeholder="프로젝트 검색..." className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm outline-none placeholder:text-slate-400" />
+            </label>
+            <button type="button" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700" aria-label="새 프로젝트 추가" title="프로젝트 생성은 5단계에서 연결됩니다"><Icon name="plus" className="h-4 w-4" /></button>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
+            <div className="mb-2 flex items-center gap-2 rounded-xl bg-violet-50 px-3 py-2.5 text-sm font-extrabold text-slate-900"><Icon name="chevron" className="h-4 w-4" /><Icon name="folder" className="h-4 w-4 text-violet-600" /><span className="truncate">{sampleProject.project.name}</span></div>
+            <div className="ml-5 border-l border-slate-200 pl-2">
+              {fileGroups.map((group) => (
+                <div key={group.label} className="mb-1">
+                  <div className="flex items-center gap-2 px-2 py-1.5 text-xs font-bold text-slate-600"><Icon name="chevron" className="h-3.5 w-3.5" /><Icon name="folder" className="h-4 w-4 text-amber-500" /><span>{group.label}</span></div>
+                  {group.fileIds.map((fileId) => {
+                    const file = sampleProject.files.find((item) => item.id === fileId);
+                    if (!file) return null;
+                    const isSelected = file.id === selectedFileId;
+                    return (
+                      <button key={file.id} type="button" onClick={() => onFileSelect(file.id)} className={`flex w-full items-center gap-2 rounded-lg py-2 pl-9 pr-2 text-left text-[13px] transition ${isSelected ? "bg-violet-100 font-bold text-violet-800" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`} aria-pressed={isSelected}>
+                        <Icon name={fileIcon(file.kind)} className={`h-4 w-4 shrink-0 ${file.kind === "video" ? "text-violet-600" : "text-sky-600"}`} /><span className="truncate">{file.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      <div className={`mt-auto shrink-0 border-t border-slate-100 ${collapsed ? "space-y-1 p-3" : "space-y-1 px-4 py-3"}`}>
+        {([["grid", "템플릿"], ["settings", "설정"]] as const).map(([icon, label]) => <button key={label} type="button" className={`flex w-full items-center rounded-xl text-sm font-semibold text-slate-600 transition hover:bg-slate-50 ${collapsed ? "h-10 justify-center" : "h-10 gap-3 px-3"}`} aria-label={label}><Icon name={icon} />{!collapsed && <span>{label}</span>}</button>)}
+      </div>
+    </div>
+  );
+}
+
+function PreviewVisual({ kind }: { kind: string }) {
+  if (kind === "image" || kind === "video") {
+    return (
+      <div className="relative aspect-video overflow-hidden rounded-2xl bg-slate-950">
+        <Image src="/samples/scene-01.png" alt="보라색 세로형 샘플 장면" fill sizes="(max-width: 1024px) 100vw, 360px" className="object-cover opacity-75" />
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/65 via-transparent to-transparent" />
+        {kind === "video" && <span className="absolute left-1/2 top-1/2 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 text-violet-700 shadow-lg"><Icon name="play" className="h-6 w-6" /></span>}
+        <span className="absolute bottom-3 left-3 rounded-full bg-black/55 px-2.5 py-1 text-[11px] font-semibold text-white">정적 샘플 미리보기</span>
+      </div>
+    );
+  }
+  if (kind === "audio") {
+    return (
+      <div className="flex aspect-video items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-800 p-6 text-white">
+        <div className="w-full">
+          <span className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-full bg-white/15"><Icon name="music" className="h-6 w-6" /></span>
+          <div className="flex h-12 items-center justify-center gap-1" aria-hidden="true">{[5, 9, 7, 12, 8, 15, 10, 18, 12, 16, 9, 13, 7, 10, 5].map((height, index) => <span key={`${height}-${index}`} className="w-1.5 rounded-full bg-white/75" style={{ height: `${height * 2}px` }} />)}</div>
+          <p className="mt-4 text-center text-xs font-semibold text-violet-100">오디오 플레이어는 6단계에서 연결됩니다</p>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="aspect-video overflow-hidden rounded-2xl bg-slate-950 p-5 font-mono text-xs leading-6 text-violet-200">
+      <p>{"{"}</p><p className="pl-4"><span className="text-sky-300">&quot;project&quot;</span>: <span className="text-amber-200">&quot;제주 숨은 명소 쇼츠&quot;</span>,</p><p className="pl-4"><span className="text-sky-300">&quot;status&quot;</span>: <span className="text-amber-200">&quot;샘플&quot;</span></p><p>{"}"}</p>
+    </div>
+  );
+}
+
+export function ShortsDashboard() {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [selectedStepId, setSelectedStepId] = useState("video");
+  const [selectedFileId, setSelectedFileId] = useState("sample-video");
+  const [panelContext, setPanelContext] = useState<PanelContext>("file");
+
+  const selectedStep = sampleProject.workflow.find((step) => step.id === selectedStepId) ?? sampleProject.workflow[0];
+  const selectedFile = sampleProject.files.find((file) => file.id === selectedFileId) ?? sampleProject.files[0];
+  const selectedFileDetails = previewDetails[selectedFile.id];
+
+  const selectFile = (fileId: string) => {
+    setSelectedFileId(fileId);
+    setPanelContext("file");
+    setMobileSidebarOpen(false);
+  };
+
+  return (
+    <div className="min-h-dvh bg-[#f5f6fa] text-slate-900">
+      <div className="flex min-h-dvh">
+        <aside className={`sticky top-0 hidden h-dvh shrink-0 border-r border-slate-200 bg-white transition-[width] duration-200 lg:block ${sidebarCollapsed ? "w-[82px]" : "w-[270px]"}`}><SidebarContent collapsed={sidebarCollapsed} onCollapse={() => setSidebarCollapsed((value) => !value)} onFileSelect={selectFile} selectedFileId={selectedFileId} /></aside>
+
+        {mobileSidebarOpen && (
+          <div className="fixed inset-0 z-50 lg:hidden">
+            <button type="button" className="absolute inset-0 bg-slate-950/45 backdrop-blur-[2px]" onClick={() => setMobileSidebarOpen(false)} aria-label="사이드바 닫기" />
+            <aside className="relative h-full w-[min(86vw,320px)] border-r border-slate-200 bg-white shadow-2xl">
+              <button type="button" onClick={() => setMobileSidebarOpen(false)} className="absolute right-3 top-5 z-10 flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-700" aria-label="사이드바 닫기"><Icon name="close" className="h-5 w-5" /></button>
+              <SidebarContent collapsed={false} onCollapse={() => setMobileSidebarOpen(false)} onFileSelect={selectFile} selectedFileId={selectedFileId} />
+            </aside>
+          </div>
+        )}
+
+        <div className="min-w-0 flex-1">
+          <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200 bg-white/95 px-4 backdrop-blur lg:hidden">
+            <button type="button" onClick={() => setMobileSidebarOpen(true)} className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-700" aria-label="메뉴 열기"><Icon name="menu" /></button>
+            <div className="min-w-0 px-3 text-center"><p className="truncate text-sm font-extrabold text-slate-950">{sampleProject.project.name}</p><p className="text-[11px] font-medium text-slate-500">Shorts Studio</p></div>
+            <button type="button" className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-600 text-white" aria-label="전체 작업 실행" title="실행 기능은 8단계에서 연결됩니다"><Icon name="play" /></button>
+          </header>
+
+          <main className="mx-auto w-full max-w-[1680px] p-4 sm:p-5 xl:p-7">
+            <section className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+              <div className="min-w-0"><div className="flex items-center gap-2"><h1 className="truncate text-2xl font-black tracking-[-0.04em] text-slate-950 sm:text-3xl">{sampleProject.project.name}</h1><button type="button" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-white hover:text-violet-600" aria-label="프로젝트 이름 변경" title="이름 변경은 5단계에서 연결됩니다"><Icon name="edit" className="h-4 w-4" /></button></div><p className="mt-1.5 max-w-2xl text-sm leading-6 text-slate-500 sm:text-[15px]">{sampleProject.project.summary}</p></div>
+              <div className="hidden shrink-0 items-center gap-2 sm:flex"><button type="button" className="inline-flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm"><Icon name="folder" className="h-4 w-4" />프로젝트 열기</button><button type="button" className="inline-flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm"><Icon name="save" className="h-4 w-4" />저장</button><button type="button" className="inline-flex h-11 items-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-bold text-white shadow-[0_8px_20px_rgba(124,58,237,0.24)]" title="실행 기능은 8단계에서 연결됩니다"><Icon name="play" className="h-4 w-4" />모든 작업 실행</button></div>
+            </section>
+
+            <section aria-labelledby="workflow-heading" className="mb-5 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)] sm:p-5">
+              <div className="mb-4 flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.14em] text-violet-600">Workflow</p><h2 id="workflow-heading" className="mt-1 text-lg font-extrabold text-slate-950">제작 흐름</h2></div><span className="rounded-full bg-violet-50 px-3 py-1.5 text-xs font-bold text-violet-700">6개 단계</span></div>
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+                {sampleProject.workflow.map((step, index) => {
+                  const isSelected = panelContext === "step" && selectedStep.id === step.id;
+                  return (
+                    <button key={step.id} type="button" onClick={() => { setSelectedStepId(step.id); setPanelContext("step"); }} className={`group relative min-h-44 rounded-2xl border p-4 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 ${isSelected ? "border-violet-400 bg-violet-50/70 shadow-[0_10px_22px_rgba(124,58,237,0.12)]" : "border-slate-200 bg-white hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-lg"}`} aria-pressed={isSelected}>
+                      <div className="flex items-start justify-between"><span className="text-xs font-black tracking-widest text-slate-400">{String(index + 1).padStart(2, "0")}</span><StatusMark status={step.status} compact /></div>
+                      <span className={`mt-4 flex h-12 w-12 items-center justify-center rounded-2xl ${isSelected ? "bg-violet-600 text-white" : "bg-violet-50 text-violet-600 group-hover:bg-violet-100"}`}><Icon name={stepIcons[step.id] ?? "sparkles"} className="h-7 w-7" /></span>
+                      <p className="mt-3 text-sm font-extrabold text-slate-900">{step.label}</p><div className="mt-2 flex items-center justify-between gap-2"><span className={`text-xs font-bold ${statusTextClass(step.status)}`}>{step.status}</span><span className="truncate text-[11px] text-slate-400">{step.summary}</span></div>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+
+            <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_350px] 2xl:grid-cols-[minmax(0,1fr)_390px]">
+              <section aria-labelledby="jobs-heading" className="min-w-0 overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.04)]">
+                <div className="flex items-center justify-between border-b border-slate-100 px-4 py-4 sm:px-5"><div className="flex items-baseline gap-2"><h2 id="jobs-heading" className="text-lg font-extrabold text-slate-950">작업 목록</h2><span className="text-xs font-bold text-slate-400">{sampleProject.jobs.length}개</span></div><button type="button" className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600">전체 상태<Icon name="chevron" className="h-3.5 w-3.5" /></button></div>
+                <div className="hidden grid-cols-[100px_96px_minmax(200px,1fr)_110px_90px] gap-3 bg-slate-50 px-5 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-400 md:grid"><span>상태</span><span>단계</span><span>작업 내용</span><span>시작 시간</span><span>소요 시간</span></div>
+                <div className="divide-y divide-slate-100">
+                  {sampleProject.jobs.map((job) => <div key={job.id} className="grid gap-3 px-4 py-4 transition hover:bg-slate-50/70 sm:px-5 md:grid-cols-[100px_96px_minmax(200px,1fr)_110px_90px] md:items-center"><div className="flex items-center gap-2"><StatusMark status={job.status} compact /><span className={`text-xs font-bold ${statusTextClass(job.status)}`}>{job.status}</span></div><span className="hidden text-sm font-extrabold text-slate-800 md:block">{job.step}</span><div className="min-w-0"><p className="truncate text-sm font-bold text-slate-800">{job.label}</p><p className="mt-0.5 truncate text-xs text-slate-500">{job.message}</p></div><div className="flex gap-4 text-xs text-slate-500 md:contents"><span><span className="mr-1 text-slate-400 md:hidden">시작</span>{job.startedAt}</span><span><span className="mr-1 text-slate-400 md:hidden">소요</span>{job.duration}</span></div></div>)}
+                </div>
+              </section>
+
+              <aside aria-labelledby="detail-heading" className="min-w-0 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)] sm:p-5">
+                <div className="mb-4 flex items-center justify-between gap-3"><div className="min-w-0"><p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-600">{panelContext === "file" ? "File preview" : "Step detail"}</p><h2 id="detail-heading" className="mt-1 truncate text-lg font-extrabold text-slate-950">{panelContext === "file" ? "선택한 파일 미리보기" : "선택한 단계"}</h2></div><button type="button" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-500" aria-label="더 보기"><Icon name="more" className="h-5 w-5" /></button></div>
+                {panelContext === "file" ? (
+                  <>
+                    <div className="mb-3 flex items-center gap-3 rounded-xl bg-slate-50 p-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-white"><Icon name={fileIcon(selectedFile.kind)} /></span><div className="min-w-0"><p className="truncate text-sm font-extrabold text-slate-900">{selectedFile.label}</p><p className="mt-0.5 truncate text-xs text-slate-500">{selectedFileDetails.path}</p></div></div>
+                    <PreviewVisual kind={selectedFile.kind} />
+                    <dl className="mt-4 grid grid-cols-[82px_minmax(0,1fr)] gap-x-3 gap-y-2 rounded-xl bg-slate-50 p-4 text-xs"><dt className="font-semibold text-slate-400">파일명</dt><dd className="truncate font-bold text-slate-800">{selectedFile.label}</dd><dt className="font-semibold text-slate-400">형식</dt><dd className="font-bold text-slate-800">{selectedFileDetails.format}</dd><dt className="font-semibold text-slate-400">정보</dt><dd className="font-bold text-slate-800">{selectedFileDetails.meta}</dd><dt className="font-semibold text-slate-400">상태</dt><dd className="font-bold text-emerald-600">샘플 준비됨</dd></dl>
+                  </>
+                ) : (
+                  <>
+                    <div className="rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-700 p-5 text-white"><div className="flex items-start justify-between"><span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15"><Icon name={stepIcons[selectedStep.id] ?? "sparkles"} className="h-7 w-7" /></span><StatusMark status={selectedStep.status} compact /></div><p className="mt-6 text-xs font-bold text-violet-200">선택한 제작 단계</p><h3 className="mt-1 text-xl font-black">{selectedStep.label}</h3><p className="mt-2 text-sm text-violet-100">{selectedStep.summary}</p></div>
+                    <div className="mt-4 space-y-3"><div className="rounded-xl border border-slate-200 p-4"><p className="text-xs font-bold text-slate-400">현재 상태</p><div className="mt-2 flex items-center gap-2"><StatusMark status={selectedStep.status} compact /><span className={`text-sm font-extrabold ${statusTextClass(selectedStep.status)}`}>{selectedStep.status}</span></div></div><div className="rounded-xl border border-dashed border-violet-200 bg-violet-50/60 p-4"><p className="text-sm font-extrabold text-violet-900">단계 설정과 실행</p><p className="mt-1 text-xs leading-5 text-violet-700">상세 설정은 7단계, 실제 실행 흐름은 8단계에서 연결됩니다.</p></div></div>
+                  </>
+                )}
+              </aside>
+            </div>
+          </main>
+        </div>
+      </div>
+    </div>
+  );
+}
