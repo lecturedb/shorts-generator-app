@@ -1,36 +1,24 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 쇼츠 제작 자동화
 
-## Getting Started
+개인 제작자가 `대본·장면 구성 → 이미지 → 영상 → 더빙 → 배경음악 → 최종 편집` 흐름으로 쇼츠를 만들고 관리하는 로컬 Next.js 애플리케이션이다.
 
-First, run the development server:
+## 개발 환경
+
+- Node.js 22
+- npm 10 및 `package-lock.json`
+- Python 3.12
+- FFmpeg 7.1
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+브라우저에서 [http://localhost:3000](http://localhost:3000)을 연다.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run lint
+npm run build
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1차 로컬 실행, 프로젝트 저장 위치, 비밀정보와 장시간 작업 유지 정책은 [`docs/RUNTIME.md`](docs/RUNTIME.md)를 따른다. 제품 범위는 `PRD.md`, 단계별 작업은 `TODO.md`, 개발 규칙은 `AGENTS.md`를 기준으로 한다.

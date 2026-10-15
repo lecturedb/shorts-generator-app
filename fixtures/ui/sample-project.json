@@ -1,0 +1,28 @@
+{
+  "fixtureVersion": 1,
+  "fixtureOnly": true,
+  "notice": "2단계 UI 표시 전용이며 project.json 저장 스키마가 아닙니다.",
+  "project": {
+    "id": "sample-local-project",
+    "name": "제주 숨은 명소 쇼츠",
+    "summary": "30초 분량의 세로형 여행 쇼츠 샘플"
+  },
+  "workflow": [
+    { "id": "script", "label": "대본·장면 구성", "status": "완료", "summary": "장면 3개" },
+    { "id": "image", "label": "이미지 생성", "status": "완료", "summary": "이미지 1개" },
+    { "id": "video", "label": "영상 생성", "status": "완료", "summary": "클립 1개" },
+    { "id": "voice", "label": "더빙", "status": "완료", "summary": "오디오 1개" },
+    { "id": "music", "label": "배경음악", "status": "완료", "summary": "음악 1개" },
+    { "id": "editing", "label": "최종 편집", "status": "대기", "summary": "실행 전" }
+  ],
+  "jobs": [
+    { "id": "sample-job-image", "label": "1번 장면 이미지 생성", "status": "완료", "message": "샘플 이미지 준비됨" },
+    { "id": "sample-job-editing", "label": "최종 편집", "status": "대기", "message": "실행 전" }
+  ],
+  "files": [
+    { "id": "sample-image", "label": "scene-01.png", "kind": "image", "url": "/samples/scene-01.png" },
+    { "id": "sample-video", "label": "clip-01.mp4", "kind": "video", "url": "/samples/clip-01.mp4" },
+    { "id": "sample-voice", "label": "narration.mp3", "kind": "audio", "url": "/samples/narration.mp3" },
+    { "id": "sample-music", "label": "background.mp3", "kind": "audio", "url": "/samples/background.mp3" }
+  ]
+}
