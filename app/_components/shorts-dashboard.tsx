@@ -325,7 +325,7 @@ function WorkflowEditor({
           </button>
         )}
       </div>
-      <div className="overflow-x-auto rounded-xl border border-slate-300 bg-slate-50 bg-[radial-gradient(circle_at_center,_#cbd5e1_1px,_transparent_1px)] bg-[length:20px_20px]">
+      <div className="overflow-x-auto rounded-xl border border-slate-300 bg-slate-50 bg-[radial-gradient(circle_at_center,#cbd5e1_1px,transparent_1px)] bg-size-[20px_20px]">
         <div
           ref={boardRef}
           className="relative w-full select-none overflow-hidden"
@@ -405,7 +405,7 @@ function WorkflowEditor({
                 >
                   <span className="text-sm tracking-[0.2em]" aria-hidden="true">•••</span>
                 </div>
-                <button type="button" onClick={() => onStepSelect(step.id)} className="h-[148px] w-full rounded-b-2xl bg-white p-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-500" aria-pressed={isSelected}>
+                <button type="button" onClick={() => onStepSelect(step.id)} className="h-37 w-full rounded-b-2xl bg-white p-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-500" aria-pressed={isSelected}>
                   <div className="flex items-start justify-between"><span className="text-xs font-black tracking-widest text-slate-400">{String(index + 1).padStart(2, "0")}</span><StatusMark status={step.status} compact /></div>
                   <span className={`mt-2 flex h-10 w-10 items-center justify-center rounded-xl ${isSelected ? "bg-violet-600 text-white" : "bg-violet-50 text-violet-600 group-hover:bg-violet-100"}`}><Icon name={stepIcons[step.id] ?? "sparkles"} className="h-6 w-6" /></span>
                   <p className="mt-2 truncate text-sm font-extrabold text-slate-900">{step.label}</p>
@@ -438,11 +438,11 @@ function SidebarContent({ project, files, collapsed, onCollapse, onFileSelect, s
     <div className="flex h-full min-h-0 flex-col bg-white">
       <div className={`relative flex h-20 shrink-0 items-center border-b border-slate-100 ${collapsed ? "justify-center px-3" : "justify-between px-5"}`}>
         <div className="flex min-w-0 items-center gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-indigo-700 text-white shadow-[0_8px_18px_rgba(109,40,217,0.24)]"><Icon name="play" className="h-6 w-6" /></span>
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-violet-600 to-indigo-700 text-white shadow-[0_8px_18px_rgba(109,40,217,0.24)]"><Icon name="play" className="h-6 w-6" /></span>
           {!collapsed && <span className="truncate text-[17px] font-extrabold tracking-tight text-slate-950">Shorts Studio</span>}
         </div>
         {collapsed ? (
-          <button type="button" onClick={onCollapse} className="absolute -right-3 top-[62px] z-20 hidden h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-base font-bold text-slate-500 shadow-sm transition hover:border-violet-200 hover:text-violet-700 lg:inline-flex" aria-label="사이드바 펼치기" title="사이드바 펼치기">»</button>
+          <button type="button" onClick={onCollapse} className="absolute -right-3 top-15.5 z-20 hidden h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-base font-bold text-slate-500 shadow-sm transition hover:border-violet-200 hover:text-violet-700 lg:inline-flex" aria-label="사이드바 펼치기" title="사이드바 펼치기">»</button>
         ) : (
           <button type="button" onClick={onCollapse} className="hidden h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 lg:inline-flex" aria-label="사이드바 접기" title="사이드바 접기"><span className="text-xl leading-none">«</span></button>
         )}
@@ -497,7 +497,7 @@ function PreviewVisual({ kind }: { kind: string }) {
     return (
       <div className="relative aspect-video overflow-hidden rounded-2xl bg-slate-950">
         <Image src="/samples/scene-01.png" alt="보라색 세로형 샘플 장면" fill sizes="(max-width: 1024px) 100vw, 360px" className="object-cover opacity-75" />
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/65 via-transparent to-transparent" />
+        <div className="absolute inset-0 bg-linear-to-t from-slate-950/65 via-transparent to-transparent" />
         {kind === "video" && <span className="absolute left-1/2 top-1/2 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 text-violet-700 shadow-lg"><Icon name="play" className="h-6 w-6" /></span>}
         <span className="absolute bottom-3 left-3 rounded-full bg-black/55 px-2.5 py-1 text-[11px] font-semibold text-white">정적 샘플 미리보기</span>
       </div>
@@ -505,7 +505,7 @@ function PreviewVisual({ kind }: { kind: string }) {
   }
   if (kind === "audio") {
     return (
-      <div className="flex aspect-video items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-800 p-6 text-white">
+      <div className="flex aspect-video items-center justify-center rounded-2xl bg-linear-to-br from-violet-600 to-indigo-800 p-6 text-white">
         <div className="w-full">
           <span className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-full bg-white/15"><Icon name="music" className="h-6 w-6" /></span>
           <div className="flex h-12 items-center justify-center gap-1" aria-hidden="true">{[5, 9, 7, 12, 8, 15, 10, 18, 12, 16, 9, 13, 7, 10, 5].map((height, index) => <span key={`${height}-${index}`} className="w-1.5 rounded-full bg-white/75" style={{ height: `${height * 2}px` }} />)}</div>
@@ -541,7 +541,7 @@ export function ShortsDashboard({ project }: { project: ProjectDocument }) {
   return (
     <div className="min-h-dvh bg-[#f5f6fa] text-slate-900">
       <div className="flex min-h-dvh">
-        <aside className={`sticky top-0 hidden h-dvh shrink-0 border-r border-slate-200 bg-white transition-[width] duration-200 lg:block ${sidebarCollapsed ? "w-[82px]" : "w-[270px]"}`}><SidebarContent project={project} files={files} collapsed={sidebarCollapsed} onCollapse={() => setSidebarCollapsed((value) => !value)} onFileSelect={selectFile} selectedFileId={selectedFileId} /></aside>
+        <aside className={`sticky top-0 hidden h-dvh shrink-0 border-r border-slate-200 bg-white transition-[width] duration-200 lg:block ${sidebarCollapsed ? "w-20.5" : "w-67.5"}`}><SidebarContent project={project} files={files} collapsed={sidebarCollapsed} onCollapse={() => setSidebarCollapsed((value) => !value)} onFileSelect={selectFile} selectedFileId={selectedFileId} /></aside>
 
         {mobileSidebarOpen && (
           <div className="fixed inset-0 z-50 lg:hidden">
@@ -560,7 +560,7 @@ export function ShortsDashboard({ project }: { project: ProjectDocument }) {
             <button type="button" className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-600 text-white" aria-label="전체 작업 실행" title="실행 기능은 8단계에서 연결됩니다"><Icon name="play" /></button>
           </header>
 
-          <main className="mx-auto w-full max-w-[1680px] p-4 sm:p-5 xl:p-7">
+          <main className="mx-auto w-full max-w-420 p-4 sm:p-5 xl:p-7">
             <section className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
               <div className="min-w-0"><div className="flex items-center gap-2"><h1 className="truncate text-2xl font-black tracking-[-0.04em] text-slate-950 sm:text-3xl">{project.project.name}</h1><button type="button" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-white hover:text-violet-600" aria-label="프로젝트 이름 변경" title="이름 변경은 5단계에서 연결됩니다"><Icon name="edit" className="h-4 w-4" /></button></div><p className="mt-1.5 max-w-2xl text-sm leading-6 text-slate-500 sm:text-[15px]">{project.project.description}</p></div>
               <div className="hidden shrink-0 items-center gap-2 sm:flex"><button type="button" className="inline-flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm"><Icon name="folder" className="h-4 w-4" />프로젝트 열기</button><button type="button" className="inline-flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm"><Icon name="save" className="h-4 w-4" />저장</button><button type="button" className="inline-flex h-11 items-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-bold text-white shadow-[0_8px_20px_rgba(124,58,237,0.24)]" title="실행 기능은 8단계에서 연결됩니다"><Icon name="play" className="h-4 w-4" />모든 작업 실행</button></div>
@@ -597,7 +597,7 @@ export function ShortsDashboard({ project }: { project: ProjectDocument }) {
                   </>
                 ) : (
                   <>
-                    <div className="rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-700 p-5 text-white"><div className="flex items-start justify-between"><span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15"><Icon name={stepIcons[selectedStep.id] ?? "sparkles"} className="h-7 w-7" /></span><StatusMark status={selectedStep.status} compact /></div><p className="mt-6 text-xs font-bold text-violet-200">선택한 제작 단계</p><h3 className="mt-1 text-xl font-black">{selectedStep.label}</h3><p className="mt-2 text-sm text-violet-100">{selectedStep.summary}</p></div>
+                    <div className="rounded-2xl bg-linear-to-br from-violet-600 to-indigo-700 p-5 text-white"><div className="flex items-start justify-between"><span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15"><Icon name={stepIcons[selectedStep.id] ?? "sparkles"} className="h-7 w-7" /></span><StatusMark status={selectedStep.status} compact /></div><p className="mt-6 text-xs font-bold text-violet-200">선택한 제작 단계</p><h3 className="mt-1 text-xl font-black">{selectedStep.label}</h3><p className="mt-2 text-sm text-violet-100">{selectedStep.summary}</p></div>
                     <div className="mt-4 space-y-3"><div className="rounded-xl border border-slate-200 p-4"><p className="text-xs font-bold text-slate-400">현재 상태</p><div className="mt-2 flex items-center gap-2"><StatusMark status={selectedStep.status} compact /><span className={`text-sm font-extrabold ${statusTextClass(selectedStep.status)}`}>{selectedStep.status}</span></div></div><div className="rounded-xl border border-dashed border-violet-200 bg-violet-50/60 p-4"><p className="text-sm font-extrabold text-violet-900">단계 설정과 실행</p><p className="mt-1 text-xs leading-5 text-violet-700">상세 설정은 7단계, 실제 실행 흐름은 8단계에서 연결됩니다.</p></div></div>
                   </>
                 )}

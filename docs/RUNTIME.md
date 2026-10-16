@@ -48,7 +48,21 @@ macOS 기본 위치는 다음과 같다.
 
 서버는 Node.js의 사용자 홈 디렉터리를 기준으로 위 경로를 해석한다. 다른 위치가 필요하면 `.env.local`의 `SHORTS_PROJECTS_DIR`에 절대 경로를 지정한다. 저장소 내부에는 실제 프로젝트 JSON이나 생성 미디어를 저장하지 않는다.
 
-각 프로젝트는 고유 ID 디렉터리를 사용하고, 대표 데이터는 `project.json`, 미디어는 별도 하위 디렉터리에 둔다. 세부 폴더명과 저장 계약은 3·4단계에서 확정한다.
+각 프로젝트는 고유 ID 디렉터리를 사용하고, 대표 데이터는 `project.json`, 미디어는 별도 하위 디렉터리에 둔다.
+
+```text
+projects/<project-id>/
+  project.json
+  script/
+  images/
+  videos/
+  audio/
+  output/
+```
+
+`project.json`은 스키마 검증을 통과한 뒤 같은 프로젝트 디렉터리의 고유 임시 파일에 기록하고 동기화한 다음 교체한다. 기록 또는 검증에 실패하면 기존 `project.json`과 완료 미디어를 유지하고 불완전한 임시 파일만 제거한다.
+
+프로젝트 ID와 상대 경로는 서버 전용 저장 모듈에서 검증한다. 절대 경로, `..`, 역슬래시와 프로젝트 밖을 가리키는 경로는 거부하며 파일 목록에서는 심볼릭 링크를 따라가지 않는다. 누락 파일 조회는 프로젝트를 변경하지 않고 `missing` 상태와 복구 안내를 반환한다.
 
 ## API 키 보관
 
@@ -69,7 +83,7 @@ macOS 기본 위치는 다음과 같다.
 
 ## UI용 샘플 자산
 
-`fixtures/projects/sample-project.json`은 3단계의 `project.json` v1 스키마를 따르는 표시용 fixture다. 앱은 Server Component에서 이 데이터를 런타임 검증한 뒤 UI에 전달한다. 실제 사용자 프로젝트의 파일 저장은 4단계에서 연결한다.
+`fixtures/projects/sample-project.json`은 `project.json` v1 스키마를 따르는 표시·저장 검증용 fixture다. 앱은 Server Component에서 이 데이터를 런타임 검증한 뒤 UI에 전달한다. 저장 기능은 `lib/server/project-storage.ts`의 서버 전용 진입점을 사용한다.
 
 샘플 미디어는 `public/samples/`에 있으며 외부 서비스 호출 없이 로컬 FFmpeg 소스로 생성했다.
 
