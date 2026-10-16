@@ -69,7 +69,7 @@ macOS 기본 위치는 다음과 같다.
 
 ## UI용 샘플 자산
 
-`fixtures/ui/sample-project.json`은 2단계 정적 UI 구현을 위한 표시용 fixture다. 3단계에서 확정할 `project.json` 저장 스키마가 아니며 영속 데이터로 읽거나 저장하지 않는다.
+`fixtures/projects/sample-project.json`은 3단계의 `project.json` v1 스키마를 따르는 표시용 fixture다. 앱은 Server Component에서 이 데이터를 런타임 검증한 뒤 UI에 전달한다. 실제 사용자 프로젝트의 파일 저장은 4단계에서 연결한다.
 
 샘플 미디어는 `public/samples/`에 있으며 외부 서비스 호출 없이 로컬 FFmpeg 소스로 생성했다.
 
