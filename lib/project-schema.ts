@@ -277,9 +277,9 @@ export function parseProjectDocument(input: unknown): ProjectDocument {
 
   const scriptValue = objectAt(root.script, "script");
   const script = {
-    title: stringAt(scriptValue.title, "script.title"),
-    hook: stringAt(scriptValue.hook, "script.hook"),
-    narration: stringAt(scriptValue.narration, "script.narration"),
+    title: stringAt(scriptValue.title, "script.title", true),
+    hook: stringAt(scriptValue.hook, "script.hook", true),
+    narration: stringAt(scriptValue.narration, "script.narration", true),
     targetDurationSeconds: numberAt(scriptValue.targetDurationSeconds, "script.targetDurationSeconds", 1),
     stale: staleAt(scriptValue.stale, "script.stale"),
   };
