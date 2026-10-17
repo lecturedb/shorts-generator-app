@@ -40,7 +40,11 @@ import type {
   ProjectSummary,
   ProjectDeletionResult,
 } from "@/lib/project-management-types";
-import type { ProjectDocument, WorkflowStepId } from "@/lib/project-schema";
+import type {
+  ProjectFileEntry,
+  ProjectFilesResult,
+} from "@/lib/project-file-types";
+import type { ProjectDocument } from "@/lib/project-schema";
 
 type IconName =
   | "audio"
@@ -71,16 +75,7 @@ type PanelContext = "file" | "step";
 type WorkflowStep = ProjectDocument["workflow"]["steps"][number];
 type WorkflowPosition = { x: number; y: number };
 type WorkflowConnection = { id: string; source: string; target: string };
-type DashboardFile = {
-  id: string;
-  label: string;
-  kind: "json" | ProjectDocument["assets"][number]["kind"];
-  stageId: "project" | WorkflowStepId;
-  path: string;
-  format: string;
-  meta: string;
-  stale: boolean;
-};
+type DashboardFile = ProjectFileEntry;
 
 const workflowCardWidth = 156;
 const workflowCardHeight = 180;
@@ -161,52 +156,20 @@ const fileGroups: ReadonlyArray<{
   { label: "06 편집", stageId: "editing" },
 ] as const;
 
-function createDashboardFiles(project: ProjectDocument): DashboardFile[] {
-  return [
-    {
-      id: "project-json",
-      label: "project.json",
-      kind: "json",
-      stageId: "project",
-      path: "project.json",
-      format: "JSON",
-      meta: `스키마 v${project.schemaVersion}`,
-      stale: false,
-    },
-    {
-      id: "script-data",
-      label: "대본·장면 데이터",
-      kind: "json",
-      stageId: "script",
-      path: "project.json / script · scenes",
-      format: "JSON",
-      meta: `장면 ${project.scenes.length}개`,
-      stale: project.script.stale.isStale,
-    },
-    ...project.assets.map((asset) => {
-      const dimensions =
-        asset.metadata.width && asset.metadata.height
-          ? `${asset.metadata.width} × ${asset.metadata.height}`
-          : null;
-      const duration =
-        asset.metadata.durationSeconds === undefined
-          ? null
-          : `${asset.metadata.durationSeconds}초`;
-      return {
-        id: asset.id,
-        label: asset.label,
-        kind: asset.kind,
-        stageId: asset.stageId,
-        path: asset.relativePath,
-        format: asset.metadata.format,
-        meta:
-          [duration, dimensions, asset.selected ? "대표 자산" : null]
-            .filter(Boolean)
-            .join(" · ") || "메타데이터 없음",
-        stale: asset.stale.isStale,
-      };
-    }),
-  ];
+function formatFileSize(sizeBytes: number | undefined) {
+  if (sizeBytes === undefined) return "—";
+  if (sizeBytes < 1024) return `${sizeBytes} B`;
+  if (sizeBytes < 1024 * 1024) return `${(sizeBytes / 1024).toFixed(1)} KB`;
+  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatFileDate(value: string | undefined) {
+  if (!value) return "—";
+  return new Intl.DateTimeFormat("ko-KR", {
+    timeZone: "Asia/Seoul",
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
 }
 
 function formatRunTime(value: string | undefined) {
@@ -768,6 +731,9 @@ function SidebarContent({
   onFileSelect,
   selectedFileId,
 }: SidebarContentProps) {
+  const [expandedGroups, setExpandedGroups] = useState<
+    Set<DashboardFile["stageId"]>
+  >(() => new Set(fileGroups.map((group) => group.stageId)));
   const filteredProjects = projects.filter((item) =>
     item.name
       .toLocaleLowerCase("ko-KR")
@@ -902,34 +868,78 @@ function SidebarContent({
                     <div className="ml-5 border-l border-slate-200 pl-2">
                       {fileGroups.map((group) => (
                         <div key={group.label} className="mb-1">
-                          <div className="flex items-center gap-2 px-2 py-1.5 text-xs font-bold text-slate-600">
-                            <Icon name="chevron" className="h-3.5 w-3.5" />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setExpandedGroups((current) => {
+                                const next = new Set(current);
+                                if (next.has(group.stageId))
+                                  next.delete(group.stageId);
+                                else next.add(group.stageId);
+                                return next;
+                              })
+                            }
+                            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-bold text-slate-600 hover:bg-slate-50"
+                            aria-expanded={expandedGroups.has(group.stageId)}
+                          >
+                            <Icon
+                              name="chevron"
+                              className={`h-3.5 w-3.5 transition-transform ${expandedGroups.has(group.stageId) ? "" : "-rotate-90"}`}
+                            />
                             <Icon
                               name="folder"
                               className="h-4 w-4 text-amber-500"
                             />
                             <span>{group.label}</span>
-                          </div>
-                          {files
-                            .filter((file) => file.stageId === group.stageId)
-                            .map((file) => {
-                              const isSelected = file.id === selectedFileId;
-                              return (
-                                <button
-                                  key={file.id}
-                                  type="button"
-                                  onClick={() => onFileSelect(file.id)}
-                                  className={`flex w-full items-center gap-2 rounded-lg py-2 pl-9 pr-2 text-left text-[13px] transition ${isSelected ? "bg-violet-100 font-bold text-violet-800" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
-                                  aria-pressed={isSelected}
-                                >
-                                  <Icon
-                                    name={fileIcon(file.kind)}
-                                    className={`h-4 w-4 shrink-0 ${file.kind === "video" ? "text-violet-600" : "text-sky-600"}`}
-                                  />
-                                  <span className="truncate">{file.label}</span>
-                                </button>
+                          </button>
+                          {expandedGroups.has(group.stageId) &&
+                            (() => {
+                              const groupFiles = files.filter(
+                                (file) => file.stageId === group.stageId,
                               );
-                            })}
+                              if (groupFiles.length === 0) {
+                                return (
+                                  <p className="py-1.5 pl-9 pr-2 text-[11px] text-slate-400">
+                                    파일 없음
+                                  </p>
+                                );
+                              }
+                              return groupFiles.map((file) => {
+                                const isSelected = file.id === selectedFileId;
+                                return (
+                                  <button
+                                    key={file.id}
+                                    type="button"
+                                    onClick={() => onFileSelect(file.id)}
+                                    className={`flex w-full items-center gap-2 rounded-lg py-2 pl-9 pr-2 text-left text-[13px] transition ${isSelected ? "bg-violet-100 font-bold text-violet-800" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
+                                    aria-pressed={isSelected}
+                                  >
+                                    <Icon
+                                      name={fileIcon(file.kind)}
+                                      className={`h-4 w-4 shrink-0 ${file.kind === "video" ? "text-violet-600" : "text-sky-600"}`}
+                                    />
+                                    <span className="truncate">
+                                      {file.label}
+                                    </span>
+                                    {file.selected && (
+                                      <span className="ml-auto shrink-0 rounded-full bg-violet-100 px-1.5 py-0.5 text-[9px] font-bold text-violet-700">
+                                        대표
+                                      </span>
+                                    )}
+                                    {file.status !== "available" && (
+                                      <span
+                                        className="ml-auto h-2 w-2 shrink-0 rounded-full bg-amber-500"
+                                        aria-label={
+                                          file.status === "missing"
+                                            ? "파일 누락"
+                                            : "미지원 형식"
+                                        }
+                                      />
+                                    )}
+                                  </button>
+                                );
+                              });
+                            })()}
                         </div>
                       ))}
                     </div>
@@ -965,80 +975,285 @@ function SidebarContent({
   );
 }
 
-function PreviewVisual({
-  kind,
-  project,
+function FileProblem({
+  file,
+  message,
 }: {
-  kind: string;
-  project: ProjectDocument;
+  file: DashboardFile;
+  message?: string;
 }) {
-  if (kind === "image" || kind === "video") {
-    return (
-      <div className="relative aspect-video overflow-hidden rounded-2xl bg-slate-950">
-        <Image
-          src="/samples/scene-01.png"
-          alt="보라색 세로형 샘플 장면"
-          fill
-          sizes="(max-width: 1024px) 100vw, 360px"
-          className="object-cover opacity-75"
-        />
-        <div className="absolute inset-0 bg-linear-to-t from-slate-950/65 via-transparent to-transparent" />
-        {kind === "video" && (
-          <span className="absolute left-1/2 top-1/2 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 text-violet-700 shadow-lg">
-            <Icon name="play" className="h-6 w-6" />
-          </span>
-        )}
-        <span className="absolute bottom-3 left-3 rounded-full bg-black/55 px-2.5 py-1 text-[11px] font-semibold text-white">
-          정적 샘플 미리보기
+  const recoveryAction =
+    file.recoveryAction ??
+    (message
+      ? "원본 파일을 복구하거나 해당 파일을 만든 제작 단계를 다시 실행하세요."
+      : undefined);
+  return (
+    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-950">
+      <div className="flex items-center gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+          <Icon name="document" />
         </span>
-      </div>
-    );
-  }
-  if (kind === "audio") {
-    return (
-      <div className="flex aspect-video items-center justify-center rounded-2xl bg-linear-to-br from-violet-600 to-indigo-800 p-6 text-white">
-        <div className="w-full">
-          <span className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-full bg-white/15">
-            <Icon name="music" className="h-6 w-6" />
-          </span>
-          <div
-            className="flex h-12 items-center justify-center gap-1"
-            aria-hidden="true"
-          >
-            {[5, 9, 7, 12, 8, 15, 10, 18, 12, 16, 9, 13, 7, 10, 5].map(
-              (height, index) => (
-                <span
-                  key={`${height}-${index}`}
-                  className="w-1.5 rounded-full bg-white/75"
-                  style={{ height: `${height * 2}px` }}
-                />
-              ),
-            )}
-          </div>
-          <p className="mt-4 text-center text-xs font-semibold text-violet-100">
-            오디오 플레이어는 6단계에서 연결됩니다
+        <div>
+          <p className="text-sm font-extrabold">
+            미리보기를 표시할 수 없습니다
           </p>
+          <p className="mt-1 text-xs leading-5 text-amber-800">
+            {message ?? file.issue ?? "파일을 확인할 수 없습니다."}
+          </p>
+        </div>
+      </div>
+      {recoveryAction && (
+        <p className="mt-4 rounded-xl bg-white/70 px-3 py-2 text-xs font-semibold leading-5 text-amber-900">
+          복구 방법: {recoveryAction}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function JsonReadablePreview({
+  project,
+  value,
+  isProjectDocument,
+}: {
+  project: ProjectDocument;
+  value: unknown;
+  isProjectDocument: boolean;
+}) {
+  if (isProjectDocument) {
+    return (
+      <div className="space-y-3 rounded-2xl bg-slate-50 p-4 text-sm">
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <p className="text-xs font-bold text-violet-600">프로젝트</p>
+          <p className="mt-1 font-extrabold text-slate-950">
+            {project.project.name}
+          </p>
+          <p className="mt-1 text-xs leading-5 text-slate-500">
+            {project.project.description || "프로젝트 설명이 없습니다."}
+          </p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <p className="text-xs font-bold text-slate-400">대본</p>
+            <p className="mt-1 font-bold text-slate-800">
+              {project.script.title || "작성 전"}
+            </p>
+            <p className="mt-2 line-clamp-3 text-xs leading-5 text-slate-500">
+              {project.script.narration || "내레이션이 없습니다."}
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <p className="text-xs font-bold text-slate-400">구성</p>
+            <p className="mt-1 font-bold text-slate-800">
+              장면 {project.scenes.length}개 · 자산 {project.assets.length}개
+            </p>
+            <p className="mt-2 text-xs leading-5 text-slate-500">
+              {project.project.settings.width} ×{" "}
+              {project.project.settings.height} ·{" "}
+              {project.project.settings.targetDurationSeconds}초
+            </p>
+          </div>
         </div>
       </div>
     );
   }
+
+  if (typeof value !== "object" || value === null) {
+    return (
+      <p className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-700">
+        {String(value)}
+      </p>
+    );
+  }
+  const entries = Object.entries(value).slice(0, 12);
   return (
-    <div className="aspect-video overflow-hidden rounded-2xl bg-slate-950 p-5 font-mono text-xs leading-6 text-violet-200">
-      <p>{"{"}</p>
-      <p className="pl-4">
-        <span className="text-sky-300">&quot;project&quot;</span>:{" "}
-        <span className="text-amber-200">
-          &quot;{project.project.name}&quot;
+    <dl className="grid grid-cols-[minmax(90px,0.35fr)_minmax(0,1fr)] gap-x-3 gap-y-2 rounded-2xl bg-slate-50 p-4 text-xs">
+      {entries.map(([key, entryValue]) => (
+        <div key={key} className="contents">
+          <dt className="truncate font-bold text-slate-500">{key}</dt>
+          <dd className="wrap-break-word font-semibold text-slate-800">
+            {typeof entryValue === "object"
+              ? Array.isArray(entryValue)
+                ? `${entryValue.length}개 항목`
+                : "객체"
+              : String(entryValue)}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function PreviewVisual({
+  file,
+  project,
+}: {
+  file: DashboardFile;
+  project: ProjectDocument;
+}) {
+  const [textContent, setTextContent] = useState<string | null>(null);
+  const [textError, setTextError] = useState<string | null>(null);
+  const [jsonView, setJsonView] = useState<"readable" | "raw">("readable");
+  const [mediaError, setMediaError] = useState<string | null>(null);
+  const contentUrl = `/api/projects/${project.project.id}/files/content?path=${encodeURIComponent(file.relativePath)}`;
+
+  useEffect(() => {
+    if (
+      file.status !== "available" ||
+      (file.kind !== "json" && file.kind !== "text")
+    )
+      return;
+
+    const controller = new AbortController();
+    fetch(contentUrl, { signal: controller.signal, cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) {
+          const body = (await response.json().catch(() => null)) as {
+            error?: unknown;
+          } | null;
+          throw new Error(
+            typeof body?.error === "string"
+              ? body.error
+              : "파일 내용을 읽을 수 없습니다.",
+          );
+        }
+        return response.text();
+      })
+      .then(setTextContent)
+      .catch((caught: unknown) => {
+        if (caught instanceof DOMException && caught.name === "AbortError")
+          return;
+        setTextError(
+          caught instanceof Error
+            ? caught.message
+            : "파일 내용을 읽을 수 없습니다.",
+        );
+      });
+    return () => controller.abort();
+  }, [contentUrl, file.kind, file.status]);
+
+  if (file.status !== "available") return <FileProblem file={file} />;
+  if (mediaError) return <FileProblem file={file} message={mediaError} />;
+
+  if (file.kind === "image") {
+    return (
+      <div className="relative aspect-video overflow-hidden rounded-2xl bg-slate-950">
+        <Image
+          src={contentUrl}
+          alt={`${file.label} 미리보기`}
+          fill
+          unoptimized
+          sizes="(max-width: 1024px) 100vw, 390px"
+          className="object-contain"
+          onError={() =>
+            setMediaError(
+              "이미지 파일이 손상되었거나 브라우저에서 해석할 수 없습니다.",
+            )
+          }
+        />
+      </div>
+    );
+  }
+  if (file.kind === "video") {
+    return (
+      <video
+        key={contentUrl}
+        controls
+        preload="metadata"
+        playsInline
+        className="aspect-video w-full rounded-2xl bg-slate-950 object-contain"
+        onError={() =>
+          setMediaError(
+            "영상 파일이 손상되었거나 브라우저가 코덱을 지원하지 않습니다.",
+          )
+        }
+      >
+        <source src={contentUrl} />
+        브라우저에서 영상 재생을 지원하지 않습니다.
+      </video>
+    );
+  }
+  if (file.kind === "audio") {
+    return (
+      <div className="rounded-2xl bg-linear-to-br from-violet-600 to-indigo-800 p-6 text-white">
+        <span className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-full bg-white/15">
+          <Icon name="music" className="h-6 w-6" />
         </span>
-        ,
-      </p>
-      <p className="pl-4">
-        <span className="text-sky-300">&quot;status&quot;</span>:{" "}
-        <span className="text-amber-200">
-          &quot;{project.project.status}&quot;
-        </span>
-      </p>
-      <p>{"}"}</p>
+        <audio
+          key={contentUrl}
+          controls
+          preload="metadata"
+          className="w-full"
+          onError={() =>
+            setMediaError(
+              "오디오 파일이 손상되었거나 브라우저가 코덱을 지원하지 않습니다.",
+            )
+          }
+        >
+          <source src={contentUrl} />
+          브라우저에서 오디오 재생을 지원하지 않습니다.
+        </audio>
+      </div>
+    );
+  }
+  if (file.kind === "unsupported") return <FileProblem file={file} />;
+  if (textError) return <FileProblem file={file} message={textError} />;
+  if (textContent === null) {
+    return (
+      <div className="flex min-h-48 items-center justify-center rounded-2xl bg-slate-50 text-sm font-semibold text-slate-500">
+        파일을 읽는 중입니다.
+      </div>
+    );
+  }
+  if (file.kind === "text") {
+    return (
+      <pre className="max-h-96 overflow-auto whitespace-pre-wrap wrap-break-word rounded-2xl bg-slate-950 p-5 text-xs leading-6 text-slate-200">
+        {textContent}
+      </pre>
+    );
+  }
+
+  let parsedJson: unknown;
+  try {
+    parsedJson = JSON.parse(textContent) as unknown;
+  } catch {
+    return (
+      <FileProblem
+        file={file}
+        message="JSON 문법이 올바르지 않아 내용을 해석할 수 없습니다."
+      />
+    );
+  }
+  return (
+    <div>
+      <div
+        className="mb-3 flex rounded-xl bg-slate-100 p-1"
+        role="group"
+        aria-label="JSON 보기 방식"
+      >
+        {(["readable", "raw"] as const).map((mode) => (
+          <button
+            key={mode}
+            type="button"
+            onClick={() => setJsonView(mode)}
+            className={`flex-1 rounded-lg px-3 py-2 text-xs font-bold ${jsonView === mode ? "bg-white text-violet-700 shadow-sm" : "text-slate-500"}`}
+            aria-pressed={jsonView === mode}
+          >
+            {mode === "readable" ? "읽기 쉬운 보기" : "원본 보기"}
+          </button>
+        ))}
+      </div>
+      {jsonView === "readable" ? (
+        <JsonReadablePreview
+          project={project}
+          value={parsedJson}
+          isProjectDocument={file.relativePath === "project.json"}
+        />
+      ) : (
+        <pre className="max-h-96 overflow-auto whitespace-pre-wrap wrap-break-word rounded-2xl bg-slate-950 p-5 text-xs leading-6 text-violet-100">
+          {JSON.stringify(parsedJson, null, 2)}
+        </pre>
+      )}
     </div>
   );
 }
@@ -1046,6 +1261,7 @@ function PreviewVisual({
 interface DashboardViewProps {
   project: ProjectDocument;
   projects: readonly ProjectSummary[];
+  files: readonly DashboardFile[];
   searchQuery: string;
   busy: boolean;
   notice: string | null;
@@ -1061,6 +1277,7 @@ interface DashboardViewProps {
 function DashboardView({
   project,
   projects,
+  files,
   searchQuery,
   busy,
   notice,
@@ -1072,11 +1289,17 @@ function DashboardView({
   onSave,
   onDelete,
 }: DashboardViewProps) {
-  const files = createDashboardFiles(project);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [selectedStepId, setSelectedStepId] = useState("video");
-  const [selectedFileId, setSelectedFileId] = useState("asset-video-scene-01");
+  const [selectedFileId, setSelectedFileId] = useState(
+    () =>
+      files.find((file) => file.kind === "video" && file.status === "available")
+        ?.id ??
+      files.find((file) => file.status === "available")?.id ??
+      files[0]?.id ??
+      "",
+  );
   const [panelContext, setPanelContext] = useState<PanelContext>("file");
 
   const selectedStep =
@@ -1428,11 +1651,15 @@ function DashboardView({
                           {selectedFile.label}
                         </p>
                         <p className="mt-0.5 truncate text-xs text-slate-500">
-                          {selectedFile.path}
+                          {selectedFile.relativePath}
                         </p>
                       </div>
                     </div>
-                    <PreviewVisual kind={selectedFile.kind} project={project} />
+                    <PreviewVisual
+                      key={selectedFile.id}
+                      file={selectedFile}
+                      project={project}
+                    />
                     <dl className="mt-4 grid grid-cols-[82px_minmax(0,1fr)] gap-x-3 gap-y-2 rounded-xl bg-slate-50 p-4 text-xs">
                       <dt className="font-semibold text-slate-400">파일명</dt>
                       <dd className="truncate font-bold text-slate-800">
@@ -1442,17 +1669,52 @@ function DashboardView({
                       <dd className="font-bold text-slate-800">
                         {selectedFile.format}
                       </dd>
-                      <dt className="font-semibold text-slate-400">정보</dt>
+                      <dt className="font-semibold text-slate-400">경로</dt>
                       <dd className="font-bold text-slate-800">
-                        {selectedFile.meta}
+                        {selectedFile.relativePath}
                       </dd>
+                      <dt className="font-semibold text-slate-400">크기</dt>
+                      <dd className="font-bold text-slate-800">
+                        {formatFileSize(selectedFile.sizeBytes)}
+                      </dd>
+                      <dt className="font-semibold text-slate-400">
+                        생성 시각
+                      </dt>
+                      <dd className="font-bold text-slate-800">
+                        {formatFileDate(
+                          selectedFile.createdAt ?? selectedFile.modifiedAt,
+                        )}
+                      </dd>
+                      {(selectedFile.width || selectedFile.height) && (
+                        <>
+                          <dt className="font-semibold text-slate-400">
+                            해상도
+                          </dt>
+                          <dd className="font-bold text-slate-800">
+                            {selectedFile.width ?? "?"} ×{" "}
+                            {selectedFile.height ?? "?"}
+                          </dd>
+                        </>
+                      )}
+                      {selectedFile.durationSeconds !== undefined && (
+                        <>
+                          <dt className="font-semibold text-slate-400">길이</dt>
+                          <dd className="font-bold text-slate-800">
+                            {selectedFile.durationSeconds}초
+                          </dd>
+                        </>
+                      )}
                       <dt className="font-semibold text-slate-400">상태</dt>
                       <dd
-                        className={`font-bold ${selectedFile.stale ? "text-amber-700" : "text-emerald-600"}`}
+                        className={`font-bold ${selectedFile.status !== "available" || selectedFile.stale ? "text-amber-700" : "text-emerald-600"}`}
                       >
-                        {selectedFile.stale
-                          ? "오래됨 · 확인 필요"
-                          : "샘플 준비됨"}
+                        {selectedFile.status === "missing"
+                          ? "파일 누락"
+                          : selectedFile.status === "unsupported"
+                            ? "미지원 형식"
+                            : selectedFile.stale
+                              ? "오래됨 · 확인 필요"
+                              : "사용 가능"}
                       </dd>
                     </dl>
                   </>
@@ -1582,6 +1844,7 @@ function EmptyWorkspace({
 export function ShortsDashboard() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [project, setProject] = useState<ProjectDocument | null>(null);
+  const [files, setFiles] = useState<ProjectFileEntry[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -1600,10 +1863,12 @@ export function ShortsDashboard() {
     setError(null);
     setNotice(null);
     try {
-      const response = await requestJson<{ project: ProjectDocument }>(
-        `/api/projects/${projectId}`,
-      );
-      setProject(response.project);
+      const [projectResponse, filesResponse] = await Promise.all([
+        requestJson<{ project: ProjectDocument }>(`/api/projects/${projectId}`),
+        requestJson<ProjectFilesResult>(`/api/projects/${projectId}/files`),
+      ]);
+      setProject(projectResponse.project);
+      setFiles(filesResponse.files);
     } catch (caught) {
       showError(caught);
     } finally {
@@ -1623,10 +1888,17 @@ export function ShortsDashboard() {
             `${result.errors.length}개 프로젝트를 읽지 못했습니다. 손상된 폴더는 유지했습니다.`,
           );
         if (result.projects[0]) {
-          const response = await requestJson<{ project: ProjectDocument }>(
-            `/api/projects/${result.projects[0].id}`,
-          );
-          if (active) setProject(response.project);
+          const projectId = result.projects[0].id;
+          const [projectResponse, filesResponse] = await Promise.all([
+            requestJson<{ project: ProjectDocument }>(
+              `/api/projects/${projectId}`,
+            ),
+            requestJson<ProjectFilesResult>(`/api/projects/${projectId}/files`),
+          ]);
+          if (active) {
+            setProject(projectResponse.project);
+            setFiles(filesResponse.files);
+          }
         }
       } catch (caught) {
         if (active) showError(caught);
@@ -1653,8 +1925,12 @@ export function ShortsDashboard() {
         method: "POST",
         body: JSON.stringify({ name }),
       });
+      const filesResponse = await requestJson<ProjectFilesResult>(
+        `/api/projects/${result.project.project.id}/files`,
+      );
       setProjects(result.projects);
       setProject(result.project);
+      setFiles(filesResponse.files);
       setSearchQuery("");
       setNotice("새 프로젝트를 만들고 로컬 저장소에 저장했습니다.");
     } catch (caught) {
@@ -1681,6 +1957,10 @@ export function ShortsDashboard() {
       );
       setProjects(result.projects);
       setProject(result.project);
+      const filesResponse = await requestJson<ProjectFilesResult>(
+        `/api/projects/${result.project.project.id}/files`,
+      );
+      setFiles(filesResponse.files);
       setNotice("프로젝트 이름을 저장했습니다.");
     } catch (caught) {
       showError(caught);
@@ -1700,6 +1980,10 @@ export function ShortsDashboard() {
       );
       setProjects(result.projects);
       setProject(result.project);
+      const filesResponse = await requestJson<ProjectFilesResult>(
+        `/api/projects/${result.project.project.id}/files`,
+      );
+      setFiles(filesResponse.files);
       setNotice("프로젝트를 저장했습니다.");
     } catch (caught) {
       showError(caught);
@@ -1730,12 +2014,18 @@ export function ShortsDashboard() {
         `프로젝트와 파일 ${result.deletedFileCount}개를 영구 삭제했습니다.`,
       );
       if (result.projects[0]) {
-        const response = await requestJson<{ project: ProjectDocument }>(
-          `/api/projects/${result.projects[0].id}`,
-        );
-        setProject(response.project);
+        const projectId = result.projects[0].id;
+        const [projectResponse, filesResponse] = await Promise.all([
+          requestJson<{ project: ProjectDocument }>(
+            `/api/projects/${projectId}`,
+          ),
+          requestJson<ProjectFilesResult>(`/api/projects/${projectId}/files`),
+        ]);
+        setProject(projectResponse.project);
+        setFiles(filesResponse.files);
       } else {
         setProject(null);
+        setFiles([]);
       }
     } catch (caught) {
       showError(caught);
@@ -1758,6 +2048,7 @@ export function ShortsDashboard() {
       key={project.project.id}
       project={project}
       projects={projects}
+      files={files}
       searchQuery={searchQuery}
       busy={busy}
       notice={notice}

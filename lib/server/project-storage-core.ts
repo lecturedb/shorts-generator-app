@@ -159,7 +159,7 @@ export async function loadProjectDocument(projectId: string, options: ProjectSto
   }
 }
 
-async function existingFilePath(projectId: string, relativePath: string, options: ProjectStorageOptions): Promise<string | null> {
+export async function resolveExistingProjectFilePath(projectId: string, relativePath: string, options: ProjectStorageOptions = {}): Promise<string | null> {
   const projectDirectory = getProjectDirectory(projectId, options);
   const candidate = resolveProjectFilePath(projectId, relativePath, options);
 
@@ -177,7 +177,7 @@ async function existingFilePath(projectId: string, relativePath: string, options
 }
 
 export async function inspectProjectFile(projectId: string, relativePath: string, options: ProjectStorageOptions = {}): Promise<ProjectFileInspection> {
-  const existingPath = await existingFilePath(projectId, relativePath, options);
+  const existingPath = await resolveExistingProjectFilePath(projectId, relativePath, options);
   if (existingPath === null) {
     return { status: "missing", relativePath, message: "파일이 없습니다. 기존 프로젝트 데이터는 유지되며 복구 또는 재생성이 필요합니다." };
   }
