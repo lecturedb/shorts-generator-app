@@ -46,6 +46,10 @@ import type {
   ProjectFilesResult,
 } from "@/lib/project-file-types";
 import type { ProjectDocument } from "@/lib/project-schema";
+import type {
+  ScriptGenerationInput,
+  ScriptGenerationRunResult,
+} from "@/lib/script-generation-types";
 
 type IconName =
   | "audio"
@@ -315,12 +319,36 @@ function statusTextClass(status: string) {
   return "text-slate-500";
 }
 
+function providerModelLabel(provider: string | null, model: string | null) {
+  if (!model) return { provider: "서비스", model: "미연결" };
+  const providerLabel = provider?.toLowerCase() === "openai" ? "OpenAI" : provider;
+  return { provider: providerLabel ?? "제공사업자 미상", model };
+}
+
+function workflowModelLabel(project: ProjectDocument, stepId: string) {
+  if (stepId === "script") {
+    return providerModelLabel(project.script.provider, project.script.model);
+  }
+  if (stepId === "voice") {
+    return providerModelLabel(project.voice.provider, project.voice.model);
+  }
+  if (stepId === "music") {
+    return providerModelLabel(project.music.provider, project.music.model);
+  }
+  if (stepId === "editing") {
+    return { provider: "실행 방식", model: "로컬 처리" };
+  }
+  return { provider: "서비스", model: "미연결" };
+}
+
 function WorkflowEditor({
+  project,
   projectId,
   steps,
   selectedStepId,
   onStepSelect,
 }: {
+  project: ProjectDocument;
   projectId: string;
   steps: readonly WorkflowStep[];
   selectedStepId: string | null;
@@ -399,6 +427,8 @@ function WorkflowEditor({
               );
             })
           ) {
+            // localStorage is the external source this effect synchronizes into React state.
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setPositions(storedPositions as Record<string, WorkflowPosition>);
             layoutInitializedRef.current = true;
             layoutCustomizedRef.current = true;
@@ -787,6 +817,7 @@ function WorkflowEditor({
           {steps.map((step, index) => {
             const position = positions[step.id];
             const isSelected = selectedStepId === step.id;
+            const modelInfo = workflowModelLabel(project, step.id);
             return (
               <article
                 key={step.id}
@@ -798,15 +829,21 @@ function WorkflowEditor({
                 }}
               >
                 <div
-                  className={`flex h-8 touch-none cursor-grab items-center justify-center rounded-t-2xl border-b active:cursor-grabbing ${isSelected ? "border-violet-300 bg-violet-200 text-violet-600" : "border-violet-200 bg-violet-100 text-violet-500"}`}
+                  className={`flex h-8 touch-none cursor-grab items-center gap-1.5 rounded-t-2xl border-b px-2 active:cursor-grabbing ${isSelected ? "border-violet-300 bg-violet-200 text-violet-700" : "border-violet-200 bg-violet-100 text-violet-600"}`}
                   onPointerDown={(event) => startCardDrag(event, step.id)}
                   onPointerMove={moveCard}
                   onPointerUp={finishCardDrag}
                   onPointerCancel={finishCardDrag}
                   title={`${step.label} 카드 이동`}
                 >
-                  <span className="text-sm tracking-[0.2em]" aria-hidden="true">
-                    •••
+                  <span className="flex min-w-0 items-center gap-1">
+                    <Icon
+                      name={stepIcons[step.id] ?? "sparkles"}
+                      className="h-4 w-4 shrink-0"
+                    />
+                    <span className="truncate text-xs font-extrabold text-slate-800">
+                      {step.label}
+                    </span>
                   </span>
                 </div>
                 <button
@@ -821,25 +858,12 @@ function WorkflowEditor({
                     </span>
                     <StatusMark status={step.status} compact />
                   </div>
-                  <div className="mt-1.5 flex w-full min-w-0 items-center gap-1.5">
-                    <span
-                      className={`flex shrink-0 items-center justify-center rounded-lg ${workflowSize === "dense" ? "h-7 w-7" : "h-8 w-8"} ${isSelected ? "bg-violet-600 text-white" : "bg-violet-50 text-violet-600 group-hover:bg-violet-100"}`}
-                    >
-                      <Icon
-                        name={stepIcons[step.id] ?? "sparkles"}
-                        className="h-4 w-4"
-                      />
-                    </span>
-                    <p className={`${workflowSize === "dense" ? "text-[10px]" : "text-xs"} line-clamp-2 min-w-0 flex-1 break-keep font-extrabold leading-4 text-slate-900`}>
-                      {step.id === "script" ? (
-                        <>
-                          대본
-                          <br />
-                          장면 구성
-                        </>
-                      ) : (
-                        step.label
-                      )}
+                  <div className="mt-1.5 w-full min-w-0 rounded-lg bg-slate-50 px-2 py-1.5">
+                    <p className="truncate text-[10px] font-bold text-slate-400">
+                      {modelInfo.provider}
+                    </p>
+                    <p className={`${workflowSize === "dense" ? "text-[10px]" : "text-[11px]"} line-clamp-2 min-w-0 break-all font-extrabold leading-4 text-slate-800`}>
+                      {modelInfo.model}
                     </p>
                   </div>
                   <div className="mt-auto flex w-full min-w-0 items-center justify-between gap-1 pt-1">
@@ -947,7 +971,7 @@ function SidebarContent({
           <button
             type="button"
             onClick={onCollapse}
-            className="sidebar-expand-control absolute -right-3 top-[42px] z-20 hidden h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white font-bold text-slate-500 shadow-sm transition hover:border-violet-200 hover:text-violet-700 sm:inline-flex"
+            className="sidebar-expand-control absolute -right-3 top-10.5 z-20 hidden h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white font-bold text-slate-500 shadow-sm transition hover:border-violet-200 hover:text-violet-700 sm:inline-flex"
             aria-label="사이드바 펼치기"
             title="사이드바 펼치기"
           >
@@ -1040,7 +1064,7 @@ function SidebarContent({
                   <button
                     type="button"
                     onClick={() => onProjectSelect(item.id)}
-                    className={`flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-[8px] leading-3 transition ${isCurrent ? "bg-violet-50 font-extrabold text-slate-900" : "font-semibold text-slate-600 hover:bg-slate-50"}`}
+                    className={`flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-[8px] leading-3 transition ${isCurrent ? "font-extrabold text-slate-900" : "font-semibold text-slate-600 hover:bg-slate-50"}`}
                     aria-current={isCurrent ? "true" : undefined}
                   >
                     <Icon
@@ -1069,9 +1093,8 @@ function SidebarContent({
                                 return next;
                               });
                             }}
-                            className={`flex w-full items-center gap-1.5 rounded-lg px-1.5 py-0.5 text-left font-bold hover:bg-slate-50 ${group.stageId === "script" && scriptSelected ? "bg-violet-100 text-violet-800" : "text-slate-600"}`}
+                            className="flex w-full items-center gap-1.5 rounded-lg px-1.5 py-0.5 text-left font-bold text-slate-600 hover:bg-slate-50"
                             aria-expanded={expandedGroups.has(group.stageId)}
-                            aria-pressed={group.stageId === "script" ? scriptSelected : undefined}
                           >
                             <Icon
                               name="chevron"
@@ -1088,48 +1111,80 @@ function SidebarContent({
                               const groupFiles = files.filter(
                                 (file) => file.stageId === group.stageId,
                               );
-                              if (groupFiles.length === 0) {
+                              const hasScriptContent =
+                                project.script.text.trim() !== "" ||
+                                project.scenes.length > 0;
+                              if (
+                                group.stageId !== "script" &&
+                                groupFiles.length === 0
+                              ) {
                                 return (
                                   <p className="py-1 pl-8 pr-2 text-[10px] text-slate-400">
                                     파일 없음
                                   </p>
                                 );
                               }
-                              return groupFiles.map((file) => {
-                                const isSelected = file.id === selectedFileId;
-                                return (
-                                  <button
-                                    key={file.id}
-                                    type="button"
-                                    onClick={() => onFileSelect(file.id)}
-                                    className={`sidebar-file-row flex w-full items-center gap-1.5 rounded-lg pl-8 pr-1.5 text-left transition ${isSelected ? "bg-violet-100 font-bold text-violet-800" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
-                                    aria-pressed={isSelected}
-                                  >
-                                    <Icon
-                                      name={fileIcon(file.kind)}
-                                      className={`h-3 w-3 shrink-0 ${file.kind === "video" ? "text-violet-600" : "text-sky-600"}`}
-                                    />
-                                    <span className="truncate">
-                                      {file.label}
-                                    </span>
-                                    {file.selected && (
-                                      <span className="sidebar-file-badge ml-auto shrink-0 rounded-full bg-violet-100 px-1.5 font-bold text-violet-700">
-                                        대표
-                                      </span>
-                                    )}
-                                    {file.status !== "available" && (
-                                      <span
-                                        className="ml-auto h-2 w-2 shrink-0 rounded-full bg-amber-500"
-                                        aria-label={
-                                          file.status === "missing"
-                                            ? "파일 누락"
-                                            : "미지원 형식"
-                                        }
-                                      />
-                                    )}
-                                  </button>
-                                );
-                              });
+                              return (
+                                <>
+                                  {group.stageId === "script" &&
+                                    (hasScriptContent ? (
+                                      <button
+                                        type="button"
+                                        onClick={onScriptSelect}
+                                        className={`sidebar-file-row flex w-full items-center gap-1.5 rounded-lg pl-8 pr-1.5 text-left transition ${scriptSelected ? "bg-violet-100 font-bold text-violet-800" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
+                                        aria-pressed={scriptSelected}
+                                      >
+                                        <Icon
+                                          name="document"
+                                          className="h-3 w-3 shrink-0 text-violet-600"
+                                        />
+                                        <span className="truncate">전체 대본</span>
+                                        <span className="sidebar-file-badge ml-auto shrink-0 rounded-full bg-emerald-50 px-1.5 font-bold text-emerald-700">
+                                          {project.scenes.length}개 장면
+                                        </span>
+                                      </button>
+                                    ) : (
+                                      <p className="py-1 pl-8 pr-2 text-[10px] text-slate-400">
+                                        아직 생성되지 않음
+                                      </p>
+                                    ))}
+                                  {groupFiles.map((file) => {
+                                    const isSelected = file.id === selectedFileId;
+                                    return (
+                                      <button
+                                        key={file.id}
+                                        type="button"
+                                        onClick={() => onFileSelect(file.id)}
+                                        className={`sidebar-file-row flex w-full items-center gap-1.5 rounded-lg pl-8 pr-1.5 text-left transition ${isSelected ? "bg-violet-100 font-bold text-violet-800" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
+                                        aria-pressed={isSelected}
+                                      >
+                                        <Icon
+                                          name={fileIcon(file.kind)}
+                                          className={`h-3 w-3 shrink-0 ${file.kind === "video" ? "text-violet-600" : "text-sky-600"}`}
+                                        />
+                                        <span className="truncate">
+                                          {file.label}
+                                        </span>
+                                        {file.selected && (
+                                          <span className="sidebar-file-badge ml-auto shrink-0 rounded-full bg-violet-100 px-1.5 font-bold text-violet-700">
+                                            대표
+                                          </span>
+                                        )}
+                                        {file.status !== "available" && (
+                                          <span
+                                            className="ml-auto h-2 w-2 shrink-0 rounded-full bg-amber-500"
+                                            aria-label={
+                                              file.status === "missing"
+                                                ? "파일 누락"
+                                                : "미지원 형식"
+                                            }
+                                          />
+                                        )}
+                                      </button>
+                                    );
+                                  })}
+                                </>
+                              );
                             })()}
                         </div>
                       ))}
@@ -1392,7 +1447,7 @@ function PreviewVisual({
         {imageExpanded &&
           createPortal(
             <div
-              className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-sm sm:p-8"
+              className="fixed inset-0 z-100 flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-sm sm:p-8"
               role="dialog"
               aria-modal="true"
               aria-label={`${file.label} 확대 미리보기`}
@@ -1590,10 +1645,17 @@ function SceneTable({
   project,
   files,
   onFileSelect,
+  editable,
+  onSceneChange,
 }: {
   project: ProjectDocument;
   files: readonly DashboardFile[];
   onFileSelect: (fileId: string) => void;
+  editable: boolean;
+  onSceneChange: (
+    sceneId: string,
+    change: { narration?: string; visual?: string; imagePrompt?: string; durationSeconds?: number },
+  ) => void;
 }) {
   const assetLabel = (assetId: string | null) =>
     assetId === null
@@ -1613,7 +1675,7 @@ function SceneTable({
         <p className="text-xs font-semibold text-slate-500">이미지 {project.scenes.filter((scene) => scene.image.status === "완료").length}/{project.scenes.length} 완료 · 영상 대상 {project.scenes.filter((scene) => scene.video.enabled).length}개</p>
       </div>
       <div className="max-w-full min-w-0 overflow-x-auto overscroll-x-contain">
-        <table className="w-full min-w-[984px] table-fixed border-collapse text-left text-sm">
+        <table className="w-full min-w-246 table-fixed border-collapse text-left text-sm">
           <colgroup>
             <col style={{ width: "6%" }} />
             <col style={{ width: "8%" }} />
@@ -1626,7 +1688,7 @@ function SceneTable({
           </colgroup>
           <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-400">
             <tr>
-              <th className="px-2 py-2">장면</th><th className="px-2 py-2">시간</th><th className="px-2 py-2">내레이션</th><th className="px-2 py-2">시각적 내용</th><th className="px-2 py-2">이미지</th><th className="px-2 py-2">영상 설정</th><th className="px-2 py-2">영상 상태</th><th className="px-2 py-2">오류·재시도</th>
+              <th className="px-2 py-2">장면</th><th className="px-2 py-2">시간</th><th className="px-2 py-2">내레이션</th><th className="px-2 py-2">시각적 내용 (한국어)</th><th className="px-2 py-2">이미지</th><th className="px-2 py-2">영상 설정</th><th className="px-2 py-2">영상 상태</th><th className="px-2 py-2">오류·재시도</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -1636,14 +1698,18 @@ function SceneTable({
               return (
                 <tr key={scene.id} className="align-top hover:bg-slate-50/60">
                   <td className="px-2 py-2"><span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-violet-100 font-black text-violet-700">{scene.order}</span></td>
-                  <td className="whitespace-nowrap px-2 py-2 font-bold text-slate-700">{scene.startSeconds}–{scene.startSeconds + scene.durationSeconds}초</td>
-                  <td className="wrap-break-word px-2 py-2 leading-4 text-slate-700">{scene.narration}</td>
-                  <td className="wrap-break-word px-2 py-2 leading-4 text-slate-600">{scene.visual || "—"}</td>
+                  <td className="whitespace-nowrap px-2 py-2 font-bold text-slate-700">
+                    <span className="block">{scene.startSeconds}–{scene.startSeconds + scene.durationSeconds}초</span>
+                    {editable && <label className="mt-2 block text-[11px] font-semibold text-slate-500">길이(초)<input type="number" min={0.1} step={0.1} value={scene.durationSeconds} onChange={(event) => onSceneChange(scene.id, { durationSeconds: Number(event.target.value) })} className="mt-1 w-full rounded-md border border-slate-200 px-1.5 py-1 text-xs text-slate-700" /></label>}
+                  </td>
+                  <td className="wrap-break-word px-2 py-2 leading-4 text-slate-700">{editable ? <textarea aria-label={`${scene.order}번 장면 내레이션`} value={scene.narration} onChange={(event) => onSceneChange(scene.id, { narration: event.target.value })} className="min-h-24 w-full resize-y rounded-lg border border-slate-200 p-2 text-xs leading-5" /> : scene.narration}</td>
+                  <td className="wrap-break-word px-2 py-2 leading-4 text-slate-600">{editable ? <textarea aria-label={`${scene.order}번 장면 시각적 내용`} value={scene.visual} onChange={(event) => onSceneChange(scene.id, { visual: event.target.value })} className="min-h-24 w-full resize-y rounded-lg border border-slate-200 p-2 text-xs leading-5" /> : (scene.visual || "—")}</td>
                   <td className="px-2 py-2">
                     <button type="button" disabled={!imageFile} onClick={() => imageFile && onFileSelect(imageFile.id)} className="flex w-full min-w-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-white p-1.5 text-left disabled:cursor-default">
                       {imageFile?.status === "available" ? <span className="relative h-10 w-8 shrink-0 overflow-hidden rounded-md bg-slate-100"><Image src={`/api/projects/${project.project.id}/files/content?path=${encodeURIComponent(imageFile.relativePath)}`} alt="" fill unoptimized sizes="32px" className="object-cover" /></span> : <span className="flex h-10 w-8 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-400"><Icon name="image" className="h-4 w-4" /></span>}
                       <span><span className={`block font-extrabold ${statusTextClass(scene.image.status)}`}>{scene.image.status}</span><span className="mt-0.5 block text-[11px] text-slate-400">{assetLabel(scene.selectedImageAssetId)}</span></span>
                     </button>
+                    {editable && <textarea aria-label={`${scene.order}번 장면 이미지 프롬프트`} value={typeof scene.image.input.prompt === "string" ? scene.image.input.prompt : ""} onChange={(event) => onSceneChange(scene.id, { imagePrompt: event.target.value })} className="mt-2 min-h-24 w-full resize-y rounded-lg border border-slate-200 p-2 text-[11px] leading-4" />}
                   </td>
                   <td className="px-2 py-2">
                     {scene.video.enabled ? <div className="space-y-1"><span className="inline-flex rounded-full bg-violet-100 px-2 py-1 font-bold text-violet-700">영상 생성</span><p className="font-semibold text-slate-700">{scene.video.mode === "start_end" ? `${scene.order}번 → ${endScene ? Number(endScene.slice(-2)) : "?"}번 이미지` : `${scene.order}번 이미지 한 장`}</p></div> : <span className="text-slate-400">이미지 사용</span>}
@@ -1660,12 +1726,82 @@ function SceneTable({
   );
 }
 
-function DetailPanel({ project, selectedStep, selectedFile, context }: { project: ProjectDocument; selectedStep: WorkflowStep; selectedFile: DashboardFile | undefined; context: PanelContext }) {
+function ScriptStepPanel({
+  project,
+  busy,
+  onProjectChange,
+  onGenerate,
+  onApplyScript,
+}: {
+  project: ProjectDocument;
+  busy: boolean;
+  onProjectChange: (project: ProjectDocument) => void;
+  onGenerate: (input: ScriptGenerationInput) => void;
+  onApplyScript: (narrations: string[]) => void;
+}) {
+  const scriptStep = project.workflow.steps.find((step) => step.id === "script");
+  const sceneCountSetting = scriptStep?.settings.sceneCount;
+  const toneSetting = scriptStep?.settings.tone;
+  const sceneCount = typeof sceneCountSetting === "number" ? sceneCountSetting : (project.scenes.length || 7);
+  const tone = typeof toneSetting === "string" ? toneSetting : "친근하고 명확한 설명체";
+  const scriptDraftRef = useRef<HTMLTextAreaElement>(null);
+  const [scriptDraftError, setScriptDraftError] = useState<string | null>(null);
+
+  const updateSettings = (change: Partial<ScriptGenerationInput>) => {
+    const next = structuredClone(project);
+    const nextStep = next.workflow.steps.find((step) => step.id === "script");
+    if (!nextStep) return;
+    if (change.topic !== undefined) next.script.topic = change.topic;
+    if (change.targetDurationSeconds !== undefined) {
+      next.script.targetDurationSeconds = change.targetDurationSeconds;
+      next.project.settings.targetDurationSeconds = change.targetDurationSeconds;
+    }
+    nextStep.settings = {
+      ...nextStep.settings,
+      ...(change.sceneCount === undefined ? {} : { sceneCount: change.sceneCount }),
+      ...(change.tone === undefined ? {} : { tone: change.tone }),
+    };
+    onProjectChange(next);
+  };
+
+  const applyWholeScript = () => {
+    const lines = (scriptDraftRef.current?.value ?? "").split(/\r?\n/).map((line) => line.trim());
+    if (lines.length !== project.scenes.length || lines.some((line) => line === "")) {
+      setScriptDraftError(`장면 수와 같은 ${project.scenes.length}개의 비어 있지 않은 줄이 필요합니다.`);
+      return;
+    }
+    setScriptDraftError(null);
+    onApplyScript(lines);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl bg-linear-to-br from-violet-600 to-indigo-700 p-4 text-white">
+        <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-bold text-violet-200">OpenAI 대본·장면 구성</p><h3 className="mt-1 text-lg font-black">{scriptStep?.status ?? "대기"}</h3></div><StatusMark status={scriptStep?.status ?? "대기"} compact /></div>
+        <p className="mt-3 text-xs leading-5 text-violet-100">전체 대본과 이미지 기준 장면만 생성합니다. 영상 대상과 영상 프롬프트는 이번 단계에서 만들지 않습니다.</p>
+      </div>
+      <div className="space-y-3">
+        <label className="block text-xs font-bold text-slate-700">주제<textarea value={project.script.topic} maxLength={500} onChange={(event) => updateSettings({ topic: event.target.value })} className="mt-1 min-h-20 w-full resize-y rounded-xl border border-slate-200 p-3 text-sm font-normal" placeholder="예: 우주에서는 폭발음이 들릴까?" /></label>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="text-xs font-bold text-slate-700">목표 길이(초)<input type="number" min={10} max={180} step={1} value={project.script.targetDurationSeconds} onChange={(event) => updateSettings({ targetDurationSeconds: Number(event.target.value) })} className="mt-1 h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal" /></label>
+          <label className="text-xs font-bold text-slate-700">장면 수<input type="number" min={1} max={20} step={1} value={sceneCount} onChange={(event) => updateSettings({ sceneCount: Number(event.target.value) })} className="mt-1 h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal" /></label>
+        </div>
+        <label className="block text-xs font-bold text-slate-700">말투<input value={tone} maxLength={100} onChange={(event) => updateSettings({ tone: event.target.value })} className="mt-1 h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal" placeholder="예: 친근하고 명확한 설명체" /></label>
+        <button type="button" disabled={busy || !project.script.topic.trim()} onClick={() => onGenerate({ topic: project.script.topic, targetDurationSeconds: project.script.targetDurationSeconds, sceneCount, tone })} className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"><Icon name="sparkles" className="h-4 w-4" />{project.scenes.length > 0 ? "다시 생성" : "생성"}</button>
+      </div>
+      {project.scenes.length > 0 && <div className="border-t border-slate-100 pt-4"><label className="block text-xs font-bold text-slate-700">전체 대본 <span className="font-normal text-slate-400">(장면마다 한 줄)</span><textarea key={project.script.text} ref={scriptDraftRef} defaultValue={project.scenes.map((scene) => scene.narration).join("\n")} className="mt-1 min-h-40 w-full resize-y rounded-xl border border-slate-200 p-3 text-sm font-normal leading-6" /></label><button type="button" onClick={applyWholeScript} className="mt-2 inline-flex h-9 items-center gap-2 rounded-lg border border-violet-200 px-3 text-xs font-bold text-violet-700"><Icon name="save" className="h-3.5 w-3.5" />장면 내레이션에 반영</button>{scriptDraftError && <p role="alert" className="mt-2 text-xs font-semibold text-rose-600">{scriptDraftError}</p>}<p className="mt-2 text-[11px] leading-5 text-slate-500">장면 내레이션이 저장 기준이며 전체 대본은 장면 순서대로 자동 동기화됩니다. 수정 후 상단 저장 버튼을 눌러 확정하세요.</p></div>}
+    </div>
+  );
+}
+
+function DetailPanel({ project, selectedStep, selectedFile, context, busy, onProjectChange, onGenerate, onApplyScript }: { project: ProjectDocument; selectedStep: WorkflowStep; selectedFile: DashboardFile | undefined; context: PanelContext; busy: boolean; onProjectChange: (project: ProjectDocument) => void; onGenerate: (input: ScriptGenerationInput) => void; onApplyScript: (narrations: string[]) => void }) {
   return (
     <aside aria-labelledby="detail-heading" className="h-full min-w-0 overflow-y-auto rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)] sm:p-5">
       <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-600">{context === "file" ? "File preview" : context === "script" ? "Script" : "Step detail"}</p>
       <h2 id="detail-heading" className="mt-1 mb-4 truncate text-lg font-extrabold text-slate-950">{context === "file" ? "선택한 파일 미리보기" : context === "script" ? "대본·장면 구성" : "선택한 단계"}</h2>
-      {context === "script" ? (
+      {context === "step" && selectedStep.id === "script" ? (
+        <ScriptStepPanel project={project} busy={busy} onProjectChange={onProjectChange} onGenerate={onGenerate} onApplyScript={onApplyScript} />
+      ) : context === "script" ? (
         <div className="space-y-3"><div className="rounded-2xl bg-linear-to-br from-violet-600 to-indigo-700 p-5 text-white"><p className="text-xs font-bold text-violet-200">전체 대본 · {project.script.targetDurationSeconds}초</p><h3 className="mt-2 text-xl font-black">{project.script.topic || "주제 미정"}</h3><p className="mt-4 max-h-72 overflow-auto text-sm leading-6 text-violet-50">{project.script.text || "대본이 없습니다."}</p></div><p className="rounded-xl bg-slate-50 p-3 text-xs font-semibold text-slate-600">장면 {project.scenes.length}개 · 이미지 대표 선택 {project.scenes.filter((scene) => scene.selectedImageAssetId).length}개</p></div>
       ) : context === "file" && selectedFile ? (
         <><div className="mb-3 flex items-center gap-3 rounded-xl bg-slate-50 p-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-white"><Icon name={fileIcon(selectedFile.kind)} /></span><div className="min-w-0"><p className="truncate text-sm font-extrabold text-slate-900">{selectedFile.label}</p><p className="mt-0.5 truncate text-xs text-slate-500">{selectedFile.relativePath}</p></div></div><PreviewVisual key={selectedFile.id} file={selectedFile} project={project} /><dl className="mt-4 grid grid-cols-[70px_minmax(0,1fr)] gap-2 rounded-xl bg-slate-50 p-4 text-xs"><dt className="text-slate-400">형식</dt><dd className="font-bold">{selectedFile.format}</dd><dt className="text-slate-400">크기</dt><dd className="font-bold">{formatFileSize(selectedFile.sizeBytes)}</dd><dt className="text-slate-400">상태</dt><dd className="font-bold text-emerald-600">{selectedFile.status === "available" ? "사용 가능" : "확인 필요"}</dd></dl></>
@@ -1690,6 +1826,9 @@ interface DashboardViewProps {
   onRename: () => void;
   onSave: () => void;
   onDelete: () => void;
+  onDismissMessage: () => void;
+  onProjectChange: (project: ProjectDocument) => void;
+  onGenerateScript: (input: ScriptGenerationInput) => void;
 }
 
 function DashboardView({
@@ -1706,6 +1845,9 @@ function DashboardView({
   onRename,
   onSave,
   onDelete,
+  onDismissMessage,
+  onProjectChange,
+  onGenerateScript,
 }: DashboardViewProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -1740,6 +1882,52 @@ function DashboardView({
     setMobileSidebarOpen(false);
   };
 
+  const markDownstreamStale = (next: ProjectDocument, reason: string) => {
+    next.assets = next.assets.map((asset) => ({ ...asset, stale: { isStale: true, reason } }));
+    for (const step of next.workflow.steps) {
+      if (step.id !== "script" && step.status === "완료") {
+        step.status = "확인 필요";
+        step.summary = reason;
+      }
+    }
+    if (next.voice.assetIds.length > 0) next.voice.status = "확인 필요";
+    if (next.music.assetIds.length > 0) next.music.status = "확인 필요";
+    if (next.output.assetId) {
+      next.output.status = "확인 필요";
+      next.output.stale = { isStale: true, reason };
+      next.editing.status = "확인 필요";
+    }
+  };
+
+  const updateScene = (sceneId: string, change: { narration?: string; visual?: string; imagePrompt?: string; durationSeconds?: number }) => {
+    const next = structuredClone(project);
+    const scene = next.scenes.find((candidate) => candidate.id === sceneId);
+    if (!scene) return;
+    if (change.narration !== undefined) scene.narration = change.narration;
+    if (change.visual !== undefined) scene.visual = change.visual;
+    if (change.imagePrompt !== undefined) scene.image.input.prompt = change.imagePrompt;
+    if (change.durationSeconds !== undefined && Number.isFinite(change.durationSeconds) && change.durationSeconds >= 0.1) scene.durationSeconds = change.durationSeconds;
+    let start = 0;
+    next.scenes.sort((left, right) => left.order - right.order).forEach((candidate) => {
+      candidate.startSeconds = start;
+      candidate.editing.durationSeconds = candidate.durationSeconds;
+      start += candidate.durationSeconds;
+    });
+    next.script.text = next.scenes.map((candidate) => candidate.narration.trim()).join(" ");
+    next.script.targetDurationSeconds = start;
+    next.project.settings.targetDurationSeconds = start;
+    markDownstreamStale(next, "대본·장면 수동 수정으로 확인 필요");
+    onProjectChange(next);
+  };
+
+  const applyWholeScript = (narrations: string[]) => {
+    const next = structuredClone(project);
+    next.scenes.forEach((scene, index) => { scene.narration = narrations[index]; });
+    next.script.text = narrations.join(" ");
+    markDownstreamStale(next, "전체 대본 수동 수정으로 확인 필요");
+    onProjectChange(next);
+  };
+
   return (
     <div className="min-h-dvh w-full overflow-x-hidden bg-[#f5f6fa] text-slate-900">
       <div className="flex min-h-dvh w-full min-w-0 overflow-x-hidden">
@@ -1761,7 +1949,7 @@ function DashboardView({
               onCollapse={() => setSidebarCollapsed((value) => !value)}
               onFileSelect={selectFile}
               onScriptSelect={selectScript}
-              selectedFileId={selectedFileId}
+              selectedFileId={panelContext === "file" ? selectedFileId : ""}
               scriptSelected={panelContext === "script"}
             />
           </div>
@@ -1800,7 +1988,7 @@ function DashboardView({
                 onCollapse={() => setMobileSidebarOpen(false)}
                 onFileSelect={selectFile}
                 onScriptSelect={selectScript}
-                selectedFileId={selectedFileId}
+                selectedFileId={panelContext === "file" ? selectedFileId : ""}
                 scriptSelected={panelContext === "script"}
               />
             </aside>
@@ -1838,14 +2026,6 @@ function DashboardView({
           </header>
 
           <main className="w-full max-w-full min-w-0 overflow-x-hidden p-4 sm:p-5 xl:p-7">
-            {(notice || error) && (
-              <div
-                role={error ? "alert" : "status"}
-                className={`mb-4 rounded-xl border px-4 py-3 text-sm font-semibold ${error ? "border-rose-200 bg-rose-50 text-rose-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}
-              >
-                {error ?? notice}
-              </div>
-            )}
             <section className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
@@ -1973,6 +2153,7 @@ function DashboardView({
               </div>
               <WorkflowEditor
                 key={project.project.id}
+                project={project}
                 projectId={project.project.id}
                 steps={project.workflow.steps}
                 selectedStepId={
@@ -1998,15 +2179,36 @@ function DashboardView({
                 selectedStep={selectedStep}
                 selectedFile={selectedFile}
                 context={panelContext}
+                busy={busy}
+                onProjectChange={onProjectChange}
+                onGenerate={onGenerateScript}
+                onApplyScript={applyWholeScript}
               />
             </div>
             </div>
 
-            <SceneTable project={project} files={files} onFileSelect={selectFile} />
+            <SceneTable project={project} files={files} onFileSelect={selectFile} editable={panelContext === "step" && selectedStep.id === "script"} onSceneChange={updateScene} />
 
           </main>
         </div>
       </div>
+      {(notice || error) && (
+        <div
+          role={error ? "alert" : "status"}
+          aria-live={error ? "assertive" : "polite"}
+          className={`fixed inset-x-4 bottom-4 z-60 flex items-start gap-3 rounded-2xl border px-4 py-3.5 text-sm font-semibold shadow-[0_18px_50px_rgba(15,23,42,0.2)] sm:left-auto sm:right-5 sm:w-[min(26rem,calc(100vw-2.5rem))] ${error ? "border-rose-200 bg-rose-50 text-rose-700" : "border-emerald-200 bg-white text-emerald-700"}`}
+        >
+          <p className="min-w-0 flex-1 leading-5">{error ?? notice}</p>
+          <button
+            type="button"
+            onClick={onDismissMessage}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-current/70 hover:bg-black/5 hover:text-current"
+            aria-label="메시지 닫기"
+          >
+            <Icon name="close" className="h-4 w-4" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -2086,6 +2288,18 @@ export function ShortsDashboard() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!notice && !error) return;
+    const timeoutId = window.setTimeout(
+      () => {
+        setNotice(null);
+        setError(null);
+      },
+      error ? 8_000 : 5_000,
+    );
+    return () => window.clearTimeout(timeoutId);
+  }, [notice, error]);
 
   const showError = (caught: unknown) => {
     setNotice(null);
@@ -2228,6 +2442,43 @@ export function ShortsDashboard() {
     }
   };
 
+  const generateScript = async (input: ScriptGenerationInput) => {
+    if (!project) return;
+    setBusy(true);
+    setError(null);
+    setNotice("OpenAI에 대본과 장면 구성을 요청했습니다. 작업 ID로 상태를 확인하고 있습니다.");
+    const requestId = crypto.randomUUID();
+    try {
+      const started = await requestJson<ScriptGenerationRunResult>(
+        `/api/projects/${project.project.id}/script-runs`,
+        { method: "POST", body: JSON.stringify({ requestId, input }) },
+      );
+      setProject(started.project);
+      let latest = started;
+      for (let attempt = 0; attempt < 120 && latest.status === "실행 중"; attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 1_000));
+        const status = await requestJson<ScriptGenerationRunResult & { projects: ProjectSummary[] }>(
+          `/api/projects/${project.project.id}/script-runs/${started.runId}`,
+        );
+        latest = status;
+        setProject(status.project);
+        setProjects(status.projects);
+      }
+      if (latest.status === "완료") {
+        setNotice(`${latest.project.scenes.length}개 장면과 이미지 프롬프트를 생성해 project.json에 저장했습니다.`);
+      } else if (latest.status === "실패" || latest.status === "확인 필요") {
+        const run = latest.project.runs.find((candidate) => candidate.id === latest.runId);
+        throw new Error(run?.errorSummary ?? run?.message ?? "대본 생성 결과를 확인해 주세요.");
+      } else {
+        setNotice("생성 작업은 서버에서 계속 진행 중입니다. 프로젝트를 다시 열어 상태를 확인할 수 있습니다.");
+      }
+    } catch (caught) {
+      showError(caught);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const deleteCurrentProject = async () => {
     if (!project) return;
     const confirmed = window.confirm(
@@ -2295,6 +2546,12 @@ export function ShortsDashboard() {
       onRename={() => void renameCurrentProject()}
       onSave={() => void saveCurrentProject()}
       onDelete={() => void deleteCurrentProject()}
+      onDismissMessage={() => {
+        setNotice(null);
+        setError(null);
+      }}
+      onProjectChange={setProject}
+      onGenerateScript={(input) => void generateScript(input)}
     />
   );
 }
