@@ -18,6 +18,12 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+html,
+body {
+  max-width: 100%;
+  overflow-x: clip;
+}
+
 button,
 input {
   font: inherit;
@@ -25,6 +31,45 @@ input {
 
 button {
   cursor: pointer;
+}
+
+.project-sidebar {
+  font-size: 14px;
+  line-height: 23px;
+}
+
+.project-sidebar button,
+.project-sidebar input,
+.project-sidebar p,
+.project-sidebar span {
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.project-sidebar .sidebar-brand {
+  font-size: 11px;
+  line-height: 14px;
+}
+
+.project-sidebar .sidebar-expand-control {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.project-sidebar .sidebar-file-row {
+  height: 22px;
+  min-height: 18px;
+  margin: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.project-sidebar .sidebar-file-badge {
+  height: 12px;
+  font-size: 9px;
+  padding-top: 1px;
+  padding-bottom: 1px;
+  line-height: 12px;
 }
 
 @keyframes status-spin {
@@ -35,6 +80,61 @@ button {
 
 .status-spinner {
   animation: status-spin 0.9s linear infinite;
+}
+
+.production-workspace {
+  display: flex;
+  width: 100%;
+  max-width: 100%;
+  height: clamp(26rem, calc(100dvh - 15rem), 32rem);
+  min-height: 26rem;
+  max-height: 32rem;
+  overflow: hidden;
+}
+
+.workflow-panel {
+  flex: 1 1 0;
+  width: 0;
+}
+
+.preview-panel {
+  flex: 0 0 320px;
+  width: 320px;
+}
+
+.production-workspace > * {
+  min-height: 0;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.dashboard-content {
+  flex: 1 1 0;
+  min-width: 0;
+  width: auto;
+  max-width: none;
+  overflow-x: hidden;
+}
+
+@media (max-width: 639px) {
+  .production-workspace {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .workflow-panel,
+  .preview-panel {
+    position: relative !important;
+    inset: auto !important;
+    flex: none;
+    width: 100%;
+  }
+
+  .preview-panel {
+    margin-top: 1rem;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

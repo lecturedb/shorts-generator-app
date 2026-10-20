@@ -70,7 +70,7 @@ export async function createProject(nameInput: unknown, options: ProjectStorageO
   const name = projectName(nameInput);
   const now = new Date().toISOString();
   const project: ProjectDocument = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     project: {
       id: `project-${randomUUID()}`,
       name,
@@ -78,13 +78,16 @@ export async function createProject(nameInput: unknown, options: ProjectStorageO
       createdAt: now,
       updatedAt: now,
       status: "대기",
-      settings: { aspectRatio: "9:16", width: 1080, height: 1920, targetDurationSeconds: 30 },
+      settings: { aspectRatio: "9:16", width: 1080, height: 1920, targetDurationSeconds: 30, fps: 30 },
     },
     workflow: { steps: workflowSteps.map((step) => ({ ...step, settings: { ...step.settings } })) },
-    script: { title: "", hook: "", narration: "", targetDurationSeconds: 30, stale: { isStale: false } },
+    script: { provider: null, model: null, topic: "", text: "", targetDurationSeconds: 30, stale: { isStale: false } },
     scenes: [],
     assets: [],
     runs: [],
+    voice: { provider: null, model: null, endpoint: null, inputSource: "script.text", input: {}, status: "대기", assetIds: [], selectedAssetId: null, error: null },
+    music: { provider: null, model: null, endpoint: null, input: {}, status: "대기", assetIds: [], selectedAssetId: null, error: null },
+    editing: { status: "대기", error: null },
     output: {
       status: "대기",
       assetId: null,

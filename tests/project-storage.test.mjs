@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { copyFile, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -16,7 +16,7 @@ import {
 } from "../lib/server/project-storage-core.ts";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
-const fixture = JSON.parse(await readFile(path.join(repositoryRoot, "fixtures/projects/sample-project.json"), "utf8"));
+const fixture = JSON.parse(await readFile(path.join(repositoryRoot, "fixtures/projects/sample-project/project.json"), "utf8"));
 
 function cloneFixture() {
   return structuredClone(fixture);
@@ -30,21 +30,13 @@ async function temporaryStorage() {
   };
 }
 
-const sampleSources = new Map([
-  ["scene-image", "scene-01.png"],
-  ["scene-video", "clip-01.mp4"],
-  ["narration", "narration.mp3"],
-  ["background-music", "background.mp3"],
-  ["final-output", "clip-01.mp4"],
-]);
-
 async function copySampleAssets(project, options) {
   await Promise.all(project.assets.map(async (asset) => {
-    const sourceName = sampleSources.get(asset.role);
-    assert.ok(sourceName, `샘플 소스가 필요합니다: ${asset.role}`);
+    const destination = resolveProjectFilePath(project.project.id, asset.relativePath, options);
+    await mkdir(path.dirname(destination), { recursive: true });
     await copyFile(
-      path.join(repositoryRoot, "public/samples", sourceName),
-      resolveProjectFilePath(project.project.id, asset.relativePath, options),
+      path.join(repositoryRoot, "fixtures/projects/sample-project", asset.relativePath),
+      destination,
     );
   }));
 }
@@ -65,10 +57,8 @@ test("프로젝트 구조를 만들고 JSON과 미디어를 재로드한다", as
 
     assert.deepEqual(restored, saved);
     assert.ok(paths.includes("project.json"));
-    assert.ok(paths.includes("images/scene-01.png"));
-    assert.ok(paths.includes("videos/clip-01.mp4"));
-    assert.ok(paths.includes("audio/narration.mp3"));
-    assert.ok(paths.includes("output/final.mp4"));
+    assert.ok(paths.includes("images/scene-01/image-01.webp"));
+    assert.ok(paths.includes("images/scene-07/image-01.webp"));
     assert.ok(files.every((file) => file.sizeBytes > 0));
   } finally {
     await storage.cleanup();
@@ -88,7 +78,7 @@ test("검증 실패 시 기존 project.json과 완료 파일을 보존한다", a
     await assert.rejects(saveProjectDocument(invalidProject, storage.options));
 
     const currentJson = await readFile(resolveProjectFilePath(project.project.id, "project.json", storage.options), "utf8");
-    const image = await inspectProjectFile(project.project.id, "images/scene-01.png", storage.options);
+    const image = await inspectProjectFile(project.project.id, "images/scene-01/image-01.webp", storage.options);
     const projectEntries = await readdir(path.dirname(resolveProjectFilePath(project.project.id, "project.json", storage.options)));
     assert.equal(currentJson, originalJson);
     assert.equal(image.status, "available");

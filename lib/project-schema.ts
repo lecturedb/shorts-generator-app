@@ -1,4 +1,5 @@
-export const PROJECT_SCHEMA_VERSION = 1 as const;
+export const PROJECT_SCHEMA_VERSION = 2 as const;
+export const LEGACY_PROJECT_SCHEMA_VERSION = 1 as const;
 
 export const workflowStatuses = ["대기", "실행 중", "완료", "실패", "취소됨", "확인 필요"] as const;
 export type WorkflowStatus = (typeof workflowStatuses)[number];
@@ -9,6 +10,9 @@ export type WorkflowStepId = (typeof workflowStepIds)[number];
 export type AssetKind = "image" | "video" | "audio";
 export type AssetRole = "scene-image" | "scene-video" | "narration" | "background-music" | "final-output";
 export type JsonSetting = string | number | boolean | null;
+export const sceneGenerationStatuses = ["대기", "요청 중", "처리 중", "완료", "실패", "확인 필요"] as const;
+export type SceneGenerationStatus = (typeof sceneGenerationStatuses)[number];
+export type SceneVideoMode = "start_only" | "start_end";
 
 export interface StaleState {
   isStale: boolean;
@@ -29,6 +33,7 @@ export interface ProjectDocument {
       width: number;
       height: number;
       targetDurationSeconds: number;
+      fps: number;
     };
   };
   workflow: {
@@ -43,19 +48,44 @@ export interface ProjectDocument {
     }>;
   };
   script: {
-    title: string;
-    hook: string;
-    narration: string;
+    provider: string | null;
+    model: string | null;
+    topic: string;
+    text: string;
     targetDurationSeconds: number;
     stale: StaleState;
   };
   scenes: Array<{
     id: string;
     order: number;
+    startSeconds: number;
     narration: string;
-    prompt: string;
+    visual: string;
     durationSeconds: number;
     assetIds: string[];
+    selectedImageAssetId: string | null;
+    image: {
+      endpoint: string;
+      input: Record<string, JsonSetting>;
+      status: SceneGenerationStatus;
+      error: string | null;
+    };
+    video: {
+      enabled: boolean;
+      mode: SceneVideoMode | null;
+      startImageAssetId: string | null;
+      endImageAssetId: string | null;
+      endpoint: string | null;
+      input: Record<string, JsonSetting>;
+      status: SceneGenerationStatus;
+      selectedAssetId: string | null;
+      error: string | null;
+    };
+    editing: {
+      selectedMedia: "image" | "video";
+      durationSeconds: number;
+      trimStartSeconds: number;
+    };
     stale: StaleState;
   }>;
   assets: Array<{
@@ -89,6 +119,31 @@ export interface ProjectDocument {
     errorSummary?: string;
     resultAssetIds: string[];
   }>;
+  voice: {
+    provider: string | null;
+    model: string | null;
+    endpoint: string | null;
+    inputSource: "script.text";
+    input: Record<string, JsonSetting>;
+    status: SceneGenerationStatus;
+    assetIds: string[];
+    selectedAssetId: string | null;
+    error: string | null;
+  };
+  music: {
+    provider: string | null;
+    model: string | null;
+    endpoint: string | null;
+    input: Record<string, JsonSetting>;
+    status: SceneGenerationStatus;
+    assetIds: string[];
+    selectedAssetId: string | null;
+    error: string | null;
+  };
+  editing: {
+    status: SceneGenerationStatus;
+    error: string | null;
+  };
   output: {
     status: WorkflowStatus;
     assetId: string | null;
@@ -109,6 +164,8 @@ const statusSet = new Set<string>(workflowStatuses);
 const stepIdSet = new Set<string>(workflowStepIds);
 const assetKindSet = new Set<string>(["image", "video", "audio"] satisfies AssetKind[]);
 const assetRoleSet = new Set<string>(["scene-image", "scene-video", "narration", "background-music", "final-output"] satisfies AssetRole[]);
+const sceneGenerationStatusSet = new Set<string>(sceneGenerationStatuses);
+const sceneVideoModeSet = new Set<string>(["start_only", "start_end"] satisfies SceneVideoMode[]);
 
 function fail(path: string, message: string): never {
   throw new ProjectValidationError(path, message);
@@ -144,6 +201,11 @@ function optionalStringAt(value: unknown, path: string): string | undefined {
   return stringAt(value, path);
 }
 
+function nullableStringAt(value: unknown, path: string, allowEmpty = false): string | null {
+  if (value === null) return null;
+  return stringAt(value, path, allowEmpty);
+}
+
 function numberAt(value: unknown, path: string, minimum = 0): number {
   if (typeof value !== "number" || !Number.isFinite(value) || value < minimum) fail(path, `${minimum} 이상의 유한한 숫자여야 합니다.`);
   return value;
@@ -176,6 +238,12 @@ function statusAt(value: unknown, path: string): WorkflowStatus {
   const status = stringAt(value, path);
   if (!statusSet.has(status)) fail(path, `지원하지 않는 상태 '${status}'입니다.`);
   return status as WorkflowStatus;
+}
+
+function sceneGenerationStatusAt(value: unknown, path: string): SceneGenerationStatus {
+  const status = stringAt(value, path);
+  if (!sceneGenerationStatusSet.has(status)) fail(path, `지원하지 않는 장면 작업 상태 '${status}'입니다.`);
+  return status as SceneGenerationStatus;
 }
 
 function stepIdAt(value: unknown, path: string): WorkflowStepId {
@@ -232,9 +300,100 @@ function settingsAt(value: unknown, path: string): Record<string, JsonSetting> {
   return parsed;
 }
 
+function migrateLegacyProject(root: Record<string, unknown>): Record<string, unknown> {
+  const project = objectAt(root.project, "project");
+  const projectSettings = objectAt(project.settings, "project.settings");
+  const script = objectAt(root.script, "script");
+  const assets = arrayAt(root.assets, "assets").map((value, index) => objectAt(value, `assets[${index}]`));
+  let elapsed = 0;
+  const scenes = arrayAt(root.scenes, "scenes").map((value, index) => {
+    const scene = objectAt(value, `scenes[${index}]`);
+    const sceneId = typeof scene.id === "string" ? scene.id : "";
+    const durationSeconds = typeof scene.durationSeconds === "number" ? scene.durationSeconds : 0;
+    const sceneAssetIds = Array.isArray(scene.assetIds) ? scene.assetIds.filter((id): id is string => typeof id === "string") : [];
+    const sceneAssets = assets.filter((asset) => asset.sceneId === sceneId && typeof asset.id === "string");
+    const selectedImage = sceneAssets.find((asset) => asset.role === "scene-image" && asset.selected === true);
+    const selectedVideo = sceneAssets.find((asset) => asset.role === "scene-video" && asset.selected === true);
+    const migrated = {
+      id: scene.id,
+      order: scene.order,
+      startSeconds: elapsed,
+      narration: scene.narration,
+      visual: "",
+      durationSeconds,
+      assetIds: sceneAssetIds,
+      selectedImageAssetId: typeof selectedImage?.id === "string" ? selectedImage.id : null,
+      image: {
+        endpoint: "",
+        input: { prompt: typeof scene.prompt === "string" ? scene.prompt : "" },
+        status: selectedImage ? "완료" : "대기",
+        error: null,
+      },
+      video: {
+        enabled: Boolean(selectedVideo),
+        mode: selectedVideo ? "start_only" : null,
+        startImageAssetId: selectedVideo && typeof selectedImage?.id === "string" ? selectedImage.id : null,
+        endImageAssetId: null,
+        endpoint: null,
+        input: {},
+        status: selectedVideo ? "완료" : "대기",
+        selectedAssetId: typeof selectedVideo?.id === "string" ? selectedVideo.id : null,
+        error: null,
+      },
+      editing: {
+        selectedMedia: selectedVideo ? "video" : "image",
+        durationSeconds,
+        trimStartSeconds: 0,
+      },
+      stale: scene.stale,
+    };
+    elapsed += durationSeconds;
+    return migrated;
+  });
+  const selectedVoice = assets.find((asset) => asset.role === "narration" && asset.selected === true);
+  const selectedMusic = assets.find((asset) => asset.role === "background-music" && asset.selected === true);
+  return {
+    ...root,
+    schemaVersion: PROJECT_SCHEMA_VERSION,
+    project: { ...project, settings: { ...projectSettings, fps: 30 } },
+    script: {
+      provider: null,
+      model: null,
+      topic: typeof script.title === "string" ? script.title : "",
+      text: typeof script.narration === "string" ? script.narration : "",
+      targetDurationSeconds: script.targetDurationSeconds,
+      stale: script.stale,
+    },
+    scenes,
+    voice: {
+      provider: null,
+      model: null,
+      endpoint: null,
+      inputSource: "script.text",
+      input: {},
+      status: selectedVoice ? "완료" : "대기",
+      assetIds: selectedVoice && typeof selectedVoice.id === "string" ? [selectedVoice.id] : [],
+      selectedAssetId: selectedVoice && typeof selectedVoice.id === "string" ? selectedVoice.id : null,
+      error: null,
+    },
+    music: {
+      provider: null,
+      model: null,
+      endpoint: null,
+      input: {},
+      status: selectedMusic ? "완료" : "대기",
+      assetIds: selectedMusic && typeof selectedMusic.id === "string" ? [selectedMusic.id] : [],
+      selectedAssetId: selectedMusic && typeof selectedMusic.id === "string" ? selectedMusic.id : null,
+      error: null,
+    },
+    editing: { status: "대기", error: null },
+  };
+}
+
 export function parseProjectDocument(input: unknown): ProjectDocument {
-  const root = objectAt(input, "project.json");
-  if (root.schemaVersion !== PROJECT_SCHEMA_VERSION) fail("schemaVersion", `지원 버전 ${PROJECT_SCHEMA_VERSION}이어야 합니다.`);
+  const sourceRoot = objectAt(input, "project.json");
+  const root = sourceRoot.schemaVersion === LEGACY_PROJECT_SCHEMA_VERSION ? migrateLegacyProject(sourceRoot) : sourceRoot;
+  if (root.schemaVersion !== PROJECT_SCHEMA_VERSION) fail("schemaVersion", `지원 버전 ${LEGACY_PROJECT_SCHEMA_VERSION} 또는 ${PROJECT_SCHEMA_VERSION}이어야 합니다.`);
 
   const projectValue = objectAt(root.project, "project");
   const project = {
@@ -251,6 +410,7 @@ export function parseProjectDocument(input: unknown): ProjectDocument {
         width: integerAt(settings.width, "project.settings.width", 1),
         height: integerAt(settings.height, "project.settings.height", 1),
         targetDurationSeconds: numberAt(settings.targetDurationSeconds, "project.settings.targetDurationSeconds", 1),
+        fps: integerAt(settings.fps, "project.settings.fps", 1),
       };
     })(),
   };
@@ -277,9 +437,10 @@ export function parseProjectDocument(input: unknown): ProjectDocument {
 
   const scriptValue = objectAt(root.script, "script");
   const script = {
-    title: stringAt(scriptValue.title, "script.title", true),
-    hook: stringAt(scriptValue.hook, "script.hook", true),
-    narration: stringAt(scriptValue.narration, "script.narration", true),
+    provider: nullableStringAt(scriptValue.provider, "script.provider"),
+    model: nullableStringAt(scriptValue.model, "script.model"),
+    topic: stringAt(scriptValue.topic, "script.topic", true),
+    text: stringAt(scriptValue.text, "script.text", true),
     targetDurationSeconds: numberAt(scriptValue.targetDurationSeconds, "script.targetDurationSeconds", 1),
     stale: staleAt(scriptValue.stale, "script.stale"),
   };
@@ -287,13 +448,44 @@ export function parseProjectDocument(input: unknown): ProjectDocument {
   const scenes = arrayAt(root.scenes, "scenes").map((value, index) => {
     const path = `scenes[${index}]`;
     const scene = objectAt(value, path);
+    const image = objectAt(scene.image, `${path}.image`);
+    const video = objectAt(scene.video, `${path}.video`);
+    const editing = objectAt(scene.editing, `${path}.editing`);
+    const videoMode = video.mode === null ? null : stringAt(video.mode, `${path}.video.mode`);
+    if (videoMode !== null && !sceneVideoModeSet.has(videoMode)) fail(`${path}.video.mode`, `지원하지 않는 영상 모드 '${videoMode}'입니다.`);
+    const selectedMedia = stringAt(editing.selectedMedia, `${path}.editing.selectedMedia`);
+    if (selectedMedia !== "image" && selectedMedia !== "video") fail(`${path}.editing.selectedMedia`, "image 또는 video여야 합니다.");
     return {
       id: idAt(scene.id, `${path}.id`),
       order: integerAt(scene.order, `${path}.order`, 1),
+      startSeconds: numberAt(scene.startSeconds, `${path}.startSeconds`),
       narration: stringAt(scene.narration, `${path}.narration`),
-      prompt: stringAt(scene.prompt, `${path}.prompt`),
+      visual: stringAt(scene.visual, `${path}.visual`, true),
       durationSeconds: numberAt(scene.durationSeconds, `${path}.durationSeconds`, 0.1),
       assetIds: idListAt(scene.assetIds, `${path}.assetIds`),
+      selectedImageAssetId: scene.selectedImageAssetId === null ? null : idAt(scene.selectedImageAssetId, `${path}.selectedImageAssetId`),
+      image: {
+        endpoint: stringAt(image.endpoint, `${path}.image.endpoint`, true),
+        input: settingsAt(image.input, `${path}.image.input`),
+        status: sceneGenerationStatusAt(image.status, `${path}.image.status`),
+        error: nullableStringAt(image.error, `${path}.image.error`),
+      },
+      video: {
+        enabled: booleanAt(video.enabled, `${path}.video.enabled`),
+        mode: videoMode as SceneVideoMode | null,
+        startImageAssetId: video.startImageAssetId === null ? null : idAt(video.startImageAssetId, `${path}.video.startImageAssetId`),
+        endImageAssetId: video.endImageAssetId === null ? null : idAt(video.endImageAssetId, `${path}.video.endImageAssetId`),
+        endpoint: nullableStringAt(video.endpoint, `${path}.video.endpoint`),
+        input: settingsAt(video.input, `${path}.video.input`),
+        status: sceneGenerationStatusAt(video.status, `${path}.video.status`),
+        selectedAssetId: video.selectedAssetId === null ? null : idAt(video.selectedAssetId, `${path}.video.selectedAssetId`),
+        error: nullableStringAt(video.error, `${path}.video.error`),
+      },
+      editing: {
+        selectedMedia: selectedMedia as "image" | "video",
+        durationSeconds: numberAt(editing.durationSeconds, `${path}.editing.durationSeconds`, 0.1),
+        trimStartSeconds: numberAt(editing.trimStartSeconds, `${path}.editing.trimStartSeconds`),
+      },
       stale: staleAt(scene.stale, `${path}.stale`),
     };
   });
@@ -348,6 +540,38 @@ export function parseProjectDocument(input: unknown): ProjectDocument {
   });
   uniqueIds(runs, "runs");
 
+  const voiceValue = objectAt(root.voice, "voice");
+  const voice = {
+    provider: nullableStringAt(voiceValue.provider, "voice.provider"),
+    model: nullableStringAt(voiceValue.model, "voice.model"),
+    endpoint: nullableStringAt(voiceValue.endpoint, "voice.endpoint"),
+    inputSource: stringAt(voiceValue.inputSource, "voice.inputSource") as "script.text",
+    input: settingsAt(voiceValue.input, "voice.input"),
+    status: sceneGenerationStatusAt(voiceValue.status, "voice.status"),
+    assetIds: idListAt(voiceValue.assetIds, "voice.assetIds"),
+    selectedAssetId: voiceValue.selectedAssetId === null ? null : idAt(voiceValue.selectedAssetId, "voice.selectedAssetId"),
+    error: nullableStringAt(voiceValue.error, "voice.error"),
+  };
+  if (voice.inputSource !== "script.text") fail("voice.inputSource", "전체 대본의 script.text만 참조해야 합니다.");
+
+  const musicValue = objectAt(root.music, "music");
+  const music = {
+    provider: nullableStringAt(musicValue.provider, "music.provider"),
+    model: nullableStringAt(musicValue.model, "music.model"),
+    endpoint: nullableStringAt(musicValue.endpoint, "music.endpoint"),
+    input: settingsAt(musicValue.input, "music.input"),
+    status: sceneGenerationStatusAt(musicValue.status, "music.status"),
+    assetIds: idListAt(musicValue.assetIds, "music.assetIds"),
+    selectedAssetId: musicValue.selectedAssetId === null ? null : idAt(musicValue.selectedAssetId, "music.selectedAssetId"),
+    error: nullableStringAt(musicValue.error, "music.error"),
+  };
+
+  const editingValue = objectAt(root.editing, "editing");
+  const editing = {
+    status: sceneGenerationStatusAt(editingValue.status, "editing.status"),
+    error: nullableStringAt(editingValue.error, "editing.error"),
+  };
+
   const outputValue = objectAt(root.output, "output");
   const outputSettings = objectAt(outputValue.settings, "output.settings");
   const output = {
@@ -371,7 +595,20 @@ export function parseProjectDocument(input: unknown): ProjectDocument {
   const requireAssets = (ids: readonly string[], path: string) => ids.forEach((id, index) => {
     if (!assetIds.has(id)) fail(`${path}[${index}]`, `존재하지 않는 자산 '${id}'을 참조합니다.`);
   });
-  scenes.forEach((scene, index) => requireAssets(scene.assetIds, `scenes[${index}].assetIds`));
+  scenes.forEach((scene, index) => {
+    requireAssets(scene.assetIds, `scenes[${index}].assetIds`);
+    requireAssets(
+      [scene.selectedImageAssetId, scene.video.startImageAssetId, scene.video.endImageAssetId, scene.video.selectedAssetId].filter((id): id is string => id !== null),
+      `scenes[${index}].selectedAssets`,
+    );
+    if (scene.video.enabled && (scene.video.mode === null || scene.video.startImageAssetId === null)) {
+      fail(`scenes[${index}].video`, "영상화 장면에는 모드와 시작 이미지가 필요합니다.");
+    }
+    if (!scene.video.enabled && (scene.video.mode !== null || scene.video.startImageAssetId !== null || scene.video.endImageAssetId !== null)) {
+      fail(`scenes[${index}].video`, "영상화하지 않는 장면에는 시작·끝 이미지 선택을 저장할 수 없습니다.");
+    }
+    if (scene.video.mode === "start_end" && scene.video.endImageAssetId === null) fail(`scenes[${index}].video.endImageAssetId`, "시작·끝 모드에는 끝 이미지가 필요합니다.");
+  });
   assets.forEach((asset, index) => {
     requireScene(asset.sceneId, `assets[${index}].sceneId`);
     requireAssets(asset.sourceAssetIds, `assets[${index}].sourceAssetIds`);
@@ -380,11 +617,15 @@ export function parseProjectDocument(input: unknown): ProjectDocument {
     requireScene(run.sceneId, `runs[${index}].sceneId`);
     requireAssets(run.resultAssetIds, `runs[${index}].resultAssetIds`);
   });
+  requireAssets(voice.assetIds, "voice.assetIds");
+  requireAssets(music.assetIds, "music.assetIds");
+  if (voice.selectedAssetId !== null) requireAssets([voice.selectedAssetId], "voice.selectedAssetId");
+  if (music.selectedAssetId !== null) requireAssets([music.selectedAssetId], "music.selectedAssetId");
   if (output.assetId !== null) {
     requireAssets([output.assetId], "output.assetId");
     const finalAsset = assets.find((asset) => asset.id === output.assetId);
     if (finalAsset?.role !== "final-output") fail("output.assetId", "최종 출력 역할의 자산을 참조해야 합니다.");
   }
 
-  return { schemaVersion: PROJECT_SCHEMA_VERSION, project, workflow: { steps }, script, scenes, assets, runs, output };
+  return { schemaVersion: PROJECT_SCHEMA_VERSION, project, workflow: { steps }, script, scenes, assets, runs, voice, music, editing, output };
 }

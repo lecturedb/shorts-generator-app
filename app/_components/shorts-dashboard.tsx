@@ -1,15 +1,16 @@
 "use client";
 
 import Image from "next/image";
+import { createPortal } from "react-dom";
 import {
   ChevronDown,
-  Ellipsis,
   FileText,
   Folder,
   FolderOpen,
   House,
   Image as ImageIcon,
   LayoutGrid,
+  Maximize2,
   Menu,
   Mic,
   Music,
@@ -52,13 +53,13 @@ type IconName =
   | "close"
   | "document"
   | "edit"
+  | "expand"
   | "folder"
   | "folderOpen"
   | "grid"
   | "home"
   | "image"
   | "menu"
-  | "more"
   | "music"
   | "play"
   | "plus"
@@ -70,17 +71,46 @@ type IconName =
   | "video"
   | "wand";
 
-type PanelContext = "file" | "step";
+type PanelContext = "file" | "step" | "script";
 
 type WorkflowStep = ProjectDocument["workflow"]["steps"][number];
 type WorkflowPosition = { x: number; y: number };
 type WorkflowConnection = { id: string; source: string; target: string };
+type WorkflowSize = "regular" | "compact" | "dense";
 type DashboardFile = ProjectFileEntry;
 
-const workflowCardWidth = 156;
-const workflowCardHeight = 180;
-const workflowBoardMinWidth = 1120;
-const workflowBoardHeight = 330;
+const workflowMetrics: Record<
+  WorkflowSize,
+  {
+    cardWidth: number;
+    cardHeight: number;
+    cardGap: number;
+    boardMinWidth: number;
+    cardTop: number;
+  }
+> = {
+  regular: {
+    cardWidth: 140,
+    cardHeight: 150,
+    cardGap: 0,
+    boardMinWidth: 680,
+    cardTop: 16,
+  },
+  compact: {
+    cardWidth: 120,
+    cardHeight: 142,
+    cardGap: 0,
+    boardMinWidth: 600,
+    cardTop: 16,
+  },
+  dense: {
+    cardWidth: 100,
+    cardHeight: 134,
+    cardGap: 0,
+    boardMinWidth: 500,
+    cardTop: 16,
+  },
+};
 
 const allowedWorkflowTargets: Record<string, readonly string[]> = {
   script: ["image"],
@@ -91,12 +121,49 @@ const allowedWorkflowTargets: Record<string, readonly string[]> = {
   editing: [],
 };
 
-function createInitialWorkflowPositions(steps: readonly WorkflowStep[]) {
+function createInitialWorkflowPositions(
+  steps: readonly WorkflowStep[],
+  size: WorkflowSize,
+  boardWidth = workflowMetrics[size].boardMinWidth,
+) {
+  const metrics = workflowMetrics[size];
   const positions: Record<string, WorkflowPosition> = {};
+  const sidePadding = 24;
+  const layoutWidth = Math.max(boardWidth, metrics.boardMinWidth);
+  const minimumColumnGap = 8;
+  const singleRowWidth =
+    sidePadding * 2 +
+    metrics.cardWidth * steps.length +
+    minimumColumnGap * Math.max(0, steps.length - 1);
+  const columnCount = layoutWidth >= singleRowWidth ? steps.length : 3;
+  const columnGap =
+    (layoutWidth - sidePadding * 2 - metrics.cardWidth * columnCount) /
+    Math.max(1, columnCount - 1);
+  const rowGap = 16;
   steps.forEach((step, index) => {
-    positions[step.id] = { x: 28 + index * 184, y: 72 };
+    const isSingleRowLayout = columnCount === steps.length;
+    const column = isSingleRowLayout ? index : Math.floor(index / 2);
+    const row = isSingleRowLayout ? 0 : index % 2;
+    positions[step.id] = {
+      x: sidePadding + column * (metrics.cardWidth + columnGap),
+      y:
+        isSingleRowLayout
+          ? metrics.cardTop +
+            (index % 2) * (metrics.cardHeight + rowGap)
+          : metrics.cardTop + row * (metrics.cardHeight + rowGap),
+    };
   });
   return positions;
+}
+
+function workflowColumnCount(
+  stepCount: number,
+  metrics: (typeof workflowMetrics)[WorkflowSize],
+  boardWidth: number,
+) {
+  const singleRowWidth =
+    48 + metrics.cardWidth * stepCount + 8 * Math.max(0, stepCount - 1);
+  return boardWidth >= singleRowWidth ? stepCount : 3;
 }
 
 function createInitialWorkflowConnections(
@@ -124,13 +191,13 @@ const icons: Record<IconName, LucideIcon> = {
   close: X,
   document: FileText,
   edit: Pencil,
+  expand: Maximize2,
   folder: Folder,
   folderOpen: FolderOpen,
   grid: LayoutGrid,
   home: House,
   image: ImageIcon,
   menu: Menu,
-  more: Ellipsis,
   music: Music,
   play: Play,
   plus: Plus,
@@ -161,41 +228,6 @@ function formatFileSize(sizeBytes: number | undefined) {
   if (sizeBytes < 1024) return `${sizeBytes} B`;
   if (sizeBytes < 1024 * 1024) return `${(sizeBytes / 1024).toFixed(1)} KB`;
   return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function formatFileDate(value: string | undefined) {
-  if (!value) return "—";
-  return new Intl.DateTimeFormat("ko-KR", {
-    timeZone: "Asia/Seoul",
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
-}
-
-function formatRunTime(value: string | undefined) {
-  if (!value) return "—";
-  return new Intl.DateTimeFormat("ko-KR", {
-    timeZone: "Asia/Seoul",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
-
-function formatRunDuration(
-  startedAt: string | undefined,
-  endedAt: string | undefined,
-) {
-  if (!startedAt || !endedAt) return "—";
-  const seconds = Math.max(
-    0,
-    Math.round((Date.parse(endedAt) - Date.parse(startedAt)) / 1000),
-  );
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const remainingSeconds = seconds % 60;
-  return [hours, minutes, remainingSeconds]
-    .map((part) => String(part).padStart(2, "0"))
-    .join(":");
 }
 
 function Icon({
@@ -284,14 +316,17 @@ function statusTextClass(status: string) {
 }
 
 function WorkflowEditor({
+  projectId,
   steps,
   selectedStepId,
   onStepSelect,
 }: {
+  projectId: string;
   steps: readonly WorkflowStep[];
   selectedStepId: string | null;
   onStepSelect: (stepId: string) => void;
 }) {
+  const viewportRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
   const cardDragRef = useRef<{
     id: string;
@@ -303,8 +338,16 @@ function WorkflowEditor({
     x: number;
     y: number;
   } | null>(null);
+  const layoutInitializedRef = useRef(false);
+  const layoutCustomizedRef = useRef(false);
+  const [workflowSize, setWorkflowSize] =
+    useState<WorkflowSize>("regular");
+  const [boardScale, setBoardScale] = useState(1);
+  const metrics = workflowMetrics[workflowSize];
+  const boardContentHeight =
+    metrics.cardTop * 2 + metrics.cardHeight * 2 + 16;
   const [positions, setPositions] = useState(() =>
-    createInitialWorkflowPositions(steps),
+    createInitialWorkflowPositions(steps, "regular"),
   );
   const [connections, setConnections] = useState(() =>
     createInitialWorkflowConnections(steps),
@@ -320,14 +363,137 @@ function WorkflowEditor({
   const [notice, setNotice] = useState(
     "카드는 이동할 수 있고, 오른쪽 연결점을 다른 카드의 왼쪽 연결점으로 드래그할 수 있습니다.",
   );
+  const boardRequiredWidth = Math.max(
+    metrics.boardMinWidth,
+    ...Object.values(positions).map(
+      (position) => position.x + metrics.cardWidth + 24,
+    ),
+  );
+  const layoutStorageKey = `shorts-studio:workflow-layout:${projectId}`;
+
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    let currentSize: WorkflowSize = "regular";
+    let animationFrame = 0;
+
+    try {
+      const storedValue = window.localStorage.getItem(layoutStorageKey);
+      if (storedValue) {
+        const parsed = JSON.parse(storedValue) as unknown;
+        if (typeof parsed === "object" && parsed !== null) {
+          const record = parsed as Record<string, unknown>;
+          const storedPositions = record.positions;
+          const storedConnections = record.connections;
+          if (
+            record.version === 4 &&
+            typeof storedPositions === "object" &&
+            storedPositions !== null &&
+            steps.every((step) => {
+              const position = (storedPositions as Record<string, unknown>)[step.id];
+              return (
+                typeof position === "object" &&
+                position !== null &&
+                Number.isFinite((position as WorkflowPosition).x) &&
+                Number.isFinite((position as WorkflowPosition).y)
+              );
+            })
+          ) {
+            setPositions(storedPositions as Record<string, WorkflowPosition>);
+            layoutInitializedRef.current = true;
+            layoutCustomizedRef.current = true;
+          }
+          if (
+            Array.isArray(storedConnections) &&
+            storedConnections.every(
+              (connection) =>
+                typeof connection === "object" &&
+                connection !== null &&
+                typeof (connection as WorkflowConnection).id === "string" &&
+                typeof (connection as WorkflowConnection).source === "string" &&
+                typeof (connection as WorkflowConnection).target === "string",
+            )
+          ) {
+            setConnections(storedConnections as WorkflowConnection[]);
+          }
+        }
+      }
+    } catch {
+      window.localStorage.removeItem(layoutStorageKey);
+    }
+
+    let currentColumnCount = 0;
+    const updateSize = () => {
+      cancelAnimationFrame(animationFrame);
+      animationFrame = requestAnimationFrame(() => {
+        const width = viewport.clientWidth;
+        const nextSize: WorkflowSize =
+          width < 640 ? "dense" : width < 980 ? "compact" : "regular";
+        const nextMetrics = workflowMetrics[nextSize];
+        const nextBoardContentHeight =
+          nextMetrics.cardTop * 2 + nextMetrics.cardHeight * 2 + 16;
+        const nextScale = Math.min(
+          1,
+          width / nextMetrics.boardMinWidth,
+          viewport.clientHeight / nextBoardContentHeight,
+        );
+        setBoardScale(nextScale);
+        const logicalBoardWidth = width / nextScale;
+        const nextColumnCount = workflowColumnCount(
+          steps.length,
+          nextMetrics,
+          logicalBoardWidth,
+        );
+        if (
+          !layoutInitializedRef.current ||
+          (!layoutCustomizedRef.current &&
+            (nextSize !== currentSize ||
+              nextColumnCount !== currentColumnCount))
+        ) {
+          setPositions(
+            createInitialWorkflowPositions(
+              steps,
+              nextSize,
+              logicalBoardWidth,
+            ),
+          );
+          layoutInitializedRef.current = true;
+        }
+        currentColumnCount = nextColumnCount;
+        if (nextSize === currentSize) return;
+        currentSize = nextSize;
+        setWorkflowSize(nextSize);
+      });
+    };
+    updateSize();
+
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(viewport);
+    return () => {
+      cancelAnimationFrame(animationFrame);
+      observer.disconnect();
+    };
+  }, [layoutStorageKey, steps]);
+
+  useEffect(() => {
+    if (!layoutCustomizedRef.current) return;
+    const saveTimer = window.setTimeout(() => {
+      window.localStorage.setItem(
+        layoutStorageKey,
+        JSON.stringify({ version: 4, positions, connections }),
+      );
+    }, 150);
+    return () => window.clearTimeout(saveTimer);
+  }, [connections, layoutStorageKey, positions]);
 
   const pointInBoard = (clientX: number, clientY: number) => {
     const bounds = boardRef.current?.getBoundingClientRect();
     if (!bounds) return null;
     return {
-      x: clientX - bounds.left,
-      y: clientY - bounds.top,
-      width: bounds.width,
+      x: (clientX - bounds.left) / boardScale,
+      y: (clientY - bounds.top) / boardScale,
+      width: bounds.width / boardScale,
+      height: bounds.height / boardScale,
     };
   };
 
@@ -337,6 +503,7 @@ function WorkflowEditor({
   ) => {
     const point = pointInBoard(event.clientX, event.clientY);
     if (!point) return;
+    layoutCustomizedRef.current = true;
     const position = positions[id];
     cardDragRef.current = {
       id,
@@ -352,11 +519,11 @@ function WorkflowEditor({
     if (!drag || !point) return;
     const nextX = Math.min(
       Math.max(8, point.x - drag.offsetX),
-      point.width - workflowCardWidth - 8,
+      point.width - metrics.cardWidth - 8,
     );
     const nextY = Math.min(
       Math.max(8, point.y - drag.offsetY),
-      workflowBoardHeight - workflowCardHeight - 8,
+      point.height - metrics.cardHeight - 8,
     );
     setPositions((current) => ({
       ...current,
@@ -402,6 +569,7 @@ function WorkflowEditor({
     }
 
     const id = `${source}-${target}`;
+    layoutCustomizedRef.current = true;
     setConnections((current) => [
       ...current.filter(
         (connection) =>
@@ -417,6 +585,7 @@ function WorkflowEditor({
 
   const deleteSelectedConnection = () => {
     if (!selectedConnectionId) return;
+    layoutCustomizedRef.current = true;
     setConnections((current) =>
       current.filter((connection) => connection.id !== selectedConnectionId),
     );
@@ -450,10 +619,10 @@ function WorkflowEditor({
     source: WorkflowPosition,
     target: WorkflowPosition,
   ) => {
-    const startX = source.x + workflowCardWidth;
-    const startY = source.y + workflowCardHeight / 2;
+    const startX = source.x + metrics.cardWidth;
+    const startY = source.y + metrics.cardHeight / 2;
     const endX = target.x - 6;
-    const endY = target.y + workflowCardHeight / 2;
+    const endY = target.y + metrics.cardHeight / 2;
     const curve = Math.min(170, Math.max(55, Math.abs(endX - startX) / 2));
     return `M ${startX} ${startY} C ${startX + curve} ${startY}, ${endX - curve} ${endY}, ${endX} ${endY}`;
   };
@@ -462,8 +631,8 @@ function WorkflowEditor({
     steps.find((step) => step.id === id)?.label ?? id;
 
   return (
-    <>
-      <div className="mb-3 flex flex-col gap-2 rounded-xl bg-slate-50 px-3 py-2.5 text-xs text-slate-600 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      <div className="mb-3 flex shrink-0 flex-col gap-2 rounded-xl bg-slate-50 px-3 py-2.5 text-xs text-slate-600 sm:flex-row sm:items-center sm:justify-between">
         <p aria-live="polite" className="leading-5">
           {notice}
         </p>
@@ -477,13 +646,19 @@ function WorkflowEditor({
           </button>
         )}
       </div>
-      <div className="overflow-x-auto rounded-xl border border-slate-300 bg-slate-50 bg-[radial-gradient(circle_at_center,#cbd5e1_1px,transparent_1px)] bg-size-[20px_20px]">
+      <div
+        ref={viewportRef}
+        className="h-0 min-h-0 w-0 min-w-full flex-1 overflow-x-auto overflow-y-hidden overscroll-x-contain rounded-xl border border-slate-300 bg-slate-50 bg-[radial-gradient(circle_at_center,#cbd5e1_1px,transparent_1px)] bg-size-[20px_20px]"
+      >
         <div
           ref={boardRef}
           className="relative w-full select-none overflow-hidden"
           style={{
-            minWidth: workflowBoardMinWidth,
-            height: workflowBoardHeight,
+            width: `max(${100 / boardScale}%, ${boardRequiredWidth}px)`,
+            minWidth: metrics.boardMinWidth,
+            height: boardContentHeight,
+            transform: `scale(${boardScale})`,
+            transformOrigin: "top left",
           }}
           onPointerMove={(event) => {
             if (!connectionDragRef.current) return;
@@ -599,7 +774,7 @@ function WorkflowEditor({
             })}
             {connectionDrag && positions[connectionDrag.source] && (
               <path
-                d={`M ${positions[connectionDrag.source].x + workflowCardWidth} ${positions[connectionDrag.source].y + workflowCardHeight / 2} L ${connectionDrag.x} ${connectionDrag.y}`}
+                d={`M ${positions[connectionDrag.source].x + metrics.cardWidth} ${positions[connectionDrag.source].y + metrics.cardHeight / 2} L ${connectionDrag.x} ${connectionDrag.y}`}
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="2"
@@ -617,8 +792,8 @@ function WorkflowEditor({
                 key={step.id}
                 className={`group absolute rounded-2xl border bg-white shadow-md transition-shadow ${isSelected ? "border-violet-500 shadow-[0_10px_24px_rgba(124,58,237,0.22)]" : "border-slate-300 hover:border-violet-400 hover:shadow-lg"}`}
                 style={{
-                  width: workflowCardWidth,
-                  height: workflowCardHeight,
+                  width: metrics.cardWidth,
+                  height: metrics.cardHeight,
                   transform: `translate(${position.x}px, ${position.y}px)`,
                 }}
               >
@@ -637,33 +812,43 @@ function WorkflowEditor({
                 <button
                   type="button"
                   onClick={() => onStepSelect(step.id)}
-                  className="h-37 w-full rounded-b-2xl bg-white p-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-500"
+                  className="flex h-[calc(100%-2rem)] w-full min-w-0 flex-col overflow-hidden rounded-b-2xl bg-white px-2.5 py-2 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-500"
                   aria-pressed={isSelected}
                 >
-                  <div className="flex items-start justify-between">
-                    <span className="text-xs font-black tracking-widest text-slate-400">
+                  <div className="flex shrink-0 items-center justify-between">
+                    <span className="text-[11px] font-black tracking-widest text-slate-400">
                       {String(index + 1).padStart(2, "0")}
                     </span>
                     <StatusMark status={step.status} compact />
                   </div>
-                  <span
-                    className={`mt-2 flex h-10 w-10 items-center justify-center rounded-xl ${isSelected ? "bg-violet-600 text-white" : "bg-violet-50 text-violet-600 group-hover:bg-violet-100"}`}
-                  >
-                    <Icon
-                      name={stepIcons[step.id] ?? "sparkles"}
-                      className="h-6 w-6"
-                    />
-                  </span>
-                  <p className="mt-2 truncate text-sm font-extrabold text-slate-900">
-                    {step.label}
-                  </p>
-                  <div className="mt-1 flex items-center justify-between gap-2">
+                  <div className="mt-1.5 flex w-full min-w-0 items-center gap-1.5">
                     <span
-                      className={`text-[11px] font-bold ${statusTextClass(step.status)}`}
+                      className={`flex shrink-0 items-center justify-center rounded-lg ${workflowSize === "dense" ? "h-7 w-7" : "h-8 w-8"} ${isSelected ? "bg-violet-600 text-white" : "bg-violet-50 text-violet-600 group-hover:bg-violet-100"}`}
+                    >
+                      <Icon
+                        name={stepIcons[step.id] ?? "sparkles"}
+                        className="h-4 w-4"
+                      />
+                    </span>
+                    <p className={`${workflowSize === "dense" ? "text-[10px]" : "text-xs"} line-clamp-2 min-w-0 flex-1 break-keep font-extrabold leading-4 text-slate-900`}>
+                      {step.id === "script" ? (
+                        <>
+                          대본
+                          <br />
+                          장면 구성
+                        </>
+                      ) : (
+                        step.label
+                      )}
+                    </p>
+                  </div>
+                  <div className="mt-auto flex w-full min-w-0 items-center justify-between gap-1 pt-1">
+                    <span
+                      className={`shrink-0 text-[10px] font-bold ${statusTextClass(step.status)}`}
                     >
                       {step.status}
                     </span>
-                    <span className="truncate text-[10px] text-slate-400">
+                    <span className="min-w-0 truncate text-[9px] text-slate-400">
                       {step.summary}
                     </span>
                   </div>
@@ -693,7 +878,7 @@ function WorkflowEditor({
           })}
         </div>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -715,7 +900,9 @@ interface SidebarContentProps {
   onProjectSelect: (projectId: string) => void;
   onCollapse: () => void;
   onFileSelect: (fileId: string) => void;
+  onScriptSelect: () => void;
   selectedFileId: string;
+  scriptSelected: boolean;
 }
 
 function SidebarContent({
@@ -729,7 +916,9 @@ function SidebarContent({
   onProjectSelect,
   onCollapse,
   onFileSelect,
+  onScriptSelect,
   selectedFileId,
+  scriptSelected,
 }: SidebarContentProps) {
   const [expandedGroups, setExpandedGroups] = useState<
     Set<DashboardFile["stageId"]>
@@ -740,16 +929,16 @@ function SidebarContent({
       .includes(searchQuery.trim().toLocaleLowerCase("ko-KR")),
   );
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white">
+    <div className="project-sidebar flex h-full min-h-0 flex-col bg-white">
       <div
-        className={`relative flex h-20 shrink-0 items-center border-b border-slate-100 ${collapsed ? "justify-center px-3" : "justify-between px-5"}`}
+        className={`relative flex h-14 shrink-0 items-center border-b border-slate-100 ${collapsed ? "justify-center px-3" : "justify-between px-3.5"}`}
       >
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-violet-600 to-indigo-700 text-white shadow-[0_8px_18px_rgba(109,40,217,0.24)]">
-            <Icon name="play" className="h-6 w-6" />
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-linear-to-br from-violet-600 to-indigo-700 text-white shadow-[0_8px_18px_rgba(109,40,217,0.24)]">
+            <Icon name="play" className="h-4 w-4" />
           </span>
           {!collapsed && (
-            <span className="truncate text-[17px] font-extrabold tracking-tight text-slate-950">
+            <span className="sidebar-brand truncate font-extrabold tracking-tight text-slate-950">
               Shorts Studio
             </span>
           )}
@@ -758,7 +947,7 @@ function SidebarContent({
           <button
             type="button"
             onClick={onCollapse}
-            className="absolute -right-3 top-15.5 z-20 hidden h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-base font-bold text-slate-500 shadow-sm transition hover:border-violet-200 hover:text-violet-700 lg:inline-flex"
+            className="sidebar-expand-control absolute -right-3 top-[42px] z-20 hidden h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white font-bold text-slate-500 shadow-sm transition hover:border-violet-200 hover:text-violet-700 sm:inline-flex"
             aria-label="사이드바 펼치기"
             title="사이드바 펼치기"
           >
@@ -768,7 +957,7 @@ function SidebarContent({
           <button
             type="button"
             onClick={onCollapse}
-            className="hidden h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 lg:inline-flex"
+            className="hidden h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 sm:inline-flex"
             aria-label="사이드바 접기"
             title="사이드바 접기"
           >
@@ -778,24 +967,24 @@ function SidebarContent({
       </div>
 
       <nav
-        className={`shrink-0 space-y-1.5 ${collapsed ? "p-3" : "px-4 py-4"}`}
+        className={`shrink-0 space-y-0.5 ${collapsed ? "p-2.5" : "px-2.5 py-1.5"}`}
         aria-label="주요 메뉴"
       >
         <button
           type="button"
-          className={`flex w-full items-center rounded-xl text-sm font-semibold text-slate-600 transition hover:bg-slate-50 ${collapsed ? "h-11 justify-center" : "h-11 gap-3 px-3"}`}
+          className={`flex w-full items-center rounded-lg text-[8px] font-semibold leading-3 text-slate-600 transition hover:bg-slate-50 ${collapsed ? "h-9 justify-center" : "h-8 gap-2 px-2"}`}
           aria-label="홈"
         >
-          <Icon name="home" />
+          <Icon name="home" className="h-3.5 w-3.5" />
           {!collapsed && <span>홈</span>}
         </button>
         <button
           type="button"
-          className={`flex w-full items-center rounded-xl bg-violet-600 text-sm font-bold text-white shadow-[0_7px_16px_rgba(124,58,237,0.18)] ${collapsed ? "h-11 justify-center" : "h-11 gap-3 px-3"}`}
+          className={`flex w-full items-center rounded-lg bg-violet-600 text-[8px] font-bold leading-3 text-white shadow-[0_7px_16px_rgba(124,58,237,0.18)] ${collapsed ? "h-9 justify-center" : "h-8 gap-2 px-2"}`}
           aria-current="page"
           aria-label="프로젝트"
         >
-          <Icon name="folder" />
+          <Icon name="folder" className="h-3.5 w-3.5" />
           {!collapsed && <span>프로젝트</span>}
         </button>
       </nav>
@@ -804,7 +993,7 @@ function SidebarContent({
         <button
           type="button"
           onClick={() => onProjectSelect(project.project.id)}
-          className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-violet-50 text-violet-700"
+          className="mx-auto flex h-9 w-9 items-center justify-center rounded-lg bg-violet-50 text-violet-700"
           aria-label={`현재 프로젝트: ${project.project.name}`}
           title={`현재 프로젝트: ${project.project.name}`}
         >
@@ -814,7 +1003,7 @@ function SidebarContent({
 
       {!collapsed && (
         <>
-          <div className="flex shrink-0 gap-2 px-4 pb-3">
+          <div className="flex shrink-0 gap-1.5 px-2.5 pb-1.5">
             <label className="relative min-w-0 flex-1">
               <span className="sr-only">프로젝트 검색</span>
               <Icon
@@ -825,33 +1014,33 @@ function SidebarContent({
                 value={searchQuery}
                 onChange={(event) => onSearchChange(event.target.value)}
                 placeholder="프로젝트 검색..."
-                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm outline-none placeholder:text-slate-400 focus:border-violet-400"
+                className="h-8 w-full rounded-lg border border-slate-200 bg-slate-50 pl-8 pr-2 text-[8px] leading-3 outline-none placeholder:text-slate-400 focus:border-violet-400"
               />
             </label>
             <button
               type="button"
               onClick={onCreate}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:border-violet-300 hover:text-violet-700"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:border-violet-300 hover:text-violet-700"
               aria-label="새 프로젝트 추가"
             >
               <Icon name="plus" className="h-4 w-4" />
             </button>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
+          <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
             {filteredProjects.length === 0 && (
-              <p className="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-500">
+              <p className="rounded-xl border border-dashed border-slate-200 px-3 py-3 text-center text-[8px] leading-3 text-slate-500">
                 검색 결과가 없습니다.
               </p>
             )}
             {filteredProjects.map((item) => {
               const isCurrent = item.id === project.project.id;
               return (
-                <div key={item.id} className="mb-2">
+                <div key={item.id} className="mb-0.5">
                   <button
                     type="button"
                     onClick={() => onProjectSelect(item.id)}
-                    className={`flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm transition ${isCurrent ? "bg-violet-50 font-extrabold text-slate-900" : "font-semibold text-slate-600 hover:bg-slate-50"}`}
+                    className={`flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-[8px] leading-3 transition ${isCurrent ? "bg-violet-50 font-extrabold text-slate-900" : "font-semibold text-slate-600 hover:bg-slate-50"}`}
                     aria-current={isCurrent ? "true" : undefined}
                   >
                     <Icon
@@ -865,22 +1054,24 @@ function SidebarContent({
                     <span className="truncate">{item.name}</span>
                   </button>
                   {isCurrent && (
-                    <div className="ml-5 border-l border-slate-200 pl-2">
+                    <div className="ml-4 border-l border-slate-200 pl-1.5">
                       {fileGroups.map((group) => (
-                        <div key={group.label} className="mb-1">
+                        <div key={group.label}>
                           <button
                             type="button"
-                            onClick={() =>
+                            onClick={() => {
+                              if (group.stageId === "script") onScriptSelect();
                               setExpandedGroups((current) => {
                                 const next = new Set(current);
                                 if (next.has(group.stageId))
                                   next.delete(group.stageId);
                                 else next.add(group.stageId);
                                 return next;
-                              })
-                            }
-                            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-bold text-slate-600 hover:bg-slate-50"
+                              });
+                            }}
+                            className={`flex w-full items-center gap-1.5 rounded-lg px-1.5 py-0.5 text-left font-bold hover:bg-slate-50 ${group.stageId === "script" && scriptSelected ? "bg-violet-100 text-violet-800" : "text-slate-600"}`}
                             aria-expanded={expandedGroups.has(group.stageId)}
+                            aria-pressed={group.stageId === "script" ? scriptSelected : undefined}
                           >
                             <Icon
                               name="chevron"
@@ -899,7 +1090,7 @@ function SidebarContent({
                               );
                               if (groupFiles.length === 0) {
                                 return (
-                                  <p className="py-1.5 pl-9 pr-2 text-[11px] text-slate-400">
+                                  <p className="py-1 pl-8 pr-2 text-[10px] text-slate-400">
                                     파일 없음
                                   </p>
                                 );
@@ -911,18 +1102,18 @@ function SidebarContent({
                                     key={file.id}
                                     type="button"
                                     onClick={() => onFileSelect(file.id)}
-                                    className={`flex w-full items-center gap-2 rounded-lg py-2 pl-9 pr-2 text-left text-[13px] transition ${isSelected ? "bg-violet-100 font-bold text-violet-800" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
+                                    className={`sidebar-file-row flex w-full items-center gap-1.5 rounded-lg pl-8 pr-1.5 text-left transition ${isSelected ? "bg-violet-100 font-bold text-violet-800" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
                                     aria-pressed={isSelected}
                                   >
                                     <Icon
                                       name={fileIcon(file.kind)}
-                                      className={`h-4 w-4 shrink-0 ${file.kind === "video" ? "text-violet-600" : "text-sky-600"}`}
+                                      className={`h-3 w-3 shrink-0 ${file.kind === "video" ? "text-violet-600" : "text-sky-600"}`}
                                     />
                                     <span className="truncate">
                                       {file.label}
                                     </span>
                                     {file.selected && (
-                                      <span className="ml-auto shrink-0 rounded-full bg-violet-100 px-1.5 py-0.5 text-[9px] font-bold text-violet-700">
+                                      <span className="sidebar-file-badge ml-auto shrink-0 rounded-full bg-violet-100 px-1.5 font-bold text-violet-700">
                                         대표
                                       </span>
                                     )}
@@ -952,7 +1143,7 @@ function SidebarContent({
       )}
 
       <div
-        className={`mt-auto shrink-0 border-t border-slate-100 ${collapsed ? "space-y-1 p-3" : "space-y-1 px-4 py-3"}`}
+        className={`mt-auto shrink-0 border-t border-slate-100 ${collapsed ? "space-y-0.5 p-2.5" : "space-y-0.5 px-2.5 py-1.5"}`}
       >
         {(
           [
@@ -963,10 +1154,10 @@ function SidebarContent({
           <button
             key={label}
             type="button"
-            className={`flex w-full items-center rounded-xl text-sm font-semibold text-slate-600 transition hover:bg-slate-50 ${collapsed ? "h-10 justify-center" : "h-10 gap-3 px-3"}`}
+            className={`flex w-full items-center rounded-lg text-[8px] font-semibold leading-3 text-slate-600 transition hover:bg-slate-50 ${collapsed ? "h-8 justify-center" : "h-8 gap-2 px-2"}`}
             aria-label={label}
           >
-            <Icon name={icon} />
+            <Icon name={icon} className="h-3.5 w-3.5" />
             {!collapsed && <span>{label}</span>}
           </button>
         ))}
@@ -1036,10 +1227,10 @@ function JsonReadablePreview({
           <div className="rounded-xl border border-slate-200 bg-white p-4">
             <p className="text-xs font-bold text-slate-400">대본</p>
             <p className="mt-1 font-bold text-slate-800">
-              {project.script.title || "작성 전"}
+              {project.script.topic || "작성 전"}
             </p>
             <p className="mt-2 line-clamp-3 text-xs leading-5 text-slate-500">
-              {project.script.narration || "내레이션이 없습니다."}
+              {project.script.text || "내레이션이 없습니다."}
             </p>
           </div>
           <div className="rounded-xl border border-slate-200 bg-white p-4">
@@ -1095,7 +1286,37 @@ function PreviewVisual({
   const [textError, setTextError] = useState<string | null>(null);
   const [jsonView, setJsonView] = useState<"readable" | "raw">("readable");
   const [mediaError, setMediaError] = useState<string | null>(null);
+  const [imageExpanded, setImageExpanded] = useState(false);
+  const [expandedImageIndex, setExpandedImageIndex] = useState(0);
   const contentUrl = `/api/projects/${project.project.id}/files/content?path=${encodeURIComponent(file.relativePath)}`;
+  const sceneImages = project.scenes.flatMap((scene) => {
+    const asset = project.assets.find(
+      (candidate) => candidate.id === scene.selectedImageAssetId,
+    );
+    return asset
+      ? [{ order: scene.order, label: asset.label, path: asset.relativePath }]
+      : [];
+  });
+  const expandedImage = sceneImages[expandedImageIndex] ?? {
+    order: null,
+    label: file.label,
+    path: file.relativePath,
+  };
+  const expandedImageUrl = `/api/projects/${project.project.id}/files/content?path=${encodeURIComponent(expandedImage.path)}`;
+
+  useEffect(() => {
+    if (!imageExpanded) return;
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") setImageExpanded(false);
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [imageExpanded]);
 
   useEffect(() => {
     if (
@@ -1137,21 +1358,128 @@ function PreviewVisual({
 
   if (file.kind === "image") {
     return (
-      <div className="relative aspect-video overflow-hidden rounded-2xl bg-slate-950">
-        <Image
-          src={contentUrl}
-          alt={`${file.label} 미리보기`}
-          fill
-          unoptimized
-          sizes="(max-width: 1024px) 100vw, 390px"
-          className="object-contain"
-          onError={() =>
-            setMediaError(
-              "이미지 파일이 손상되었거나 브라우저에서 해석할 수 없습니다.",
-            )
-          }
-        />
-      </div>
+      <>
+        <div className="relative aspect-video overflow-hidden rounded-2xl bg-slate-950">
+          <Image
+            src={contentUrl}
+            alt={`${file.label} 미리보기`}
+            fill
+            unoptimized
+            sizes="(max-width: 1024px) 100vw, 390px"
+            className="object-contain"
+            onError={() =>
+              setMediaError(
+                "이미지 파일이 손상되었거나 브라우저에서 해석할 수 없습니다.",
+              )
+            }
+          />
+          <button
+            type="button"
+            onClick={() => {
+              const selectedIndex = sceneImages.findIndex(
+                (image) => image.path === file.relativePath,
+              );
+              setExpandedImageIndex(selectedIndex >= 0 ? selectedIndex : 0);
+              setImageExpanded(true);
+            }}
+            className="absolute right-2 top-2 z-10 flex h-9 w-9 items-center justify-center rounded-lg bg-slate-950/70 text-white shadow-lg backdrop-blur transition hover:bg-slate-950/90"
+            aria-label={`${file.label} 크게 보기`}
+            title="크게 보기"
+          >
+            <Icon name="expand" className="h-4 w-4" />
+          </button>
+        </div>
+        {imageExpanded &&
+          createPortal(
+            <div
+              className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-sm sm:p-8"
+              role="dialog"
+              aria-modal="true"
+              aria-label={`${file.label} 확대 미리보기`}
+              onClick={() => setImageExpanded(false)}
+            >
+              <button
+                type="button"
+                onClick={() => setImageExpanded(false)}
+                className="absolute right-4 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-white transition hover:bg-white/25 sm:right-6 sm:top-6"
+                aria-label="확대 미리보기 닫기"
+              >
+                <Icon name="close" className="h-5 w-5" />
+              </button>
+              <div
+                className="flex h-full min-h-0 w-full max-w-6xl flex-col gap-3"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="relative min-h-0 flex-1">
+                  <Image
+                    src={expandedImageUrl}
+                    alt={`${expandedImage.label} 확대 미리보기`}
+                    fill
+                    unoptimized
+                    sizes="100vw"
+                    className="object-contain"
+                  />
+                  {sceneImages.length > 1 && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedImageIndex((current) =>
+                            (current - 1 + sceneImages.length) %
+                            sceneImages.length,
+                          )
+                        }
+                        className="absolute left-0 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-slate-950/65 text-white shadow-lg transition hover:bg-slate-950/85"
+                        aria-label="이전 장면 이미지"
+                      >
+                        <Icon name="chevron" className="h-5 w-5 rotate-90" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedImageIndex(
+                            (current) => (current + 1) % sceneImages.length,
+                          )
+                        }
+                        className="absolute right-0 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-slate-950/65 text-white shadow-lg transition hover:bg-slate-950/85"
+                        aria-label="다음 장면 이미지"
+                      >
+                        <Icon name="chevron" className="h-5 w-5 -rotate-90" />
+                      </button>
+                    </>
+                  )}
+                </div>
+                {sceneImages.length > 0 && (
+                  <div className="flex shrink-0 justify-center gap-2 overflow-x-auto py-1">
+                    {sceneImages.map((image, index) => (
+                      <button
+                        key={image.path}
+                        type="button"
+                        onClick={() => setExpandedImageIndex(index)}
+                        className={`relative h-16 w-12 shrink-0 overflow-hidden rounded-lg border-2 bg-slate-900 transition ${index === expandedImageIndex ? "border-violet-400" : "border-white/20 opacity-70 hover:opacity-100"}`}
+                        aria-label={`${image.order}번 장면 이미지 보기`}
+                        aria-pressed={index === expandedImageIndex}
+                      >
+                        <Image
+                          src={`/api/projects/${project.project.id}/files/content?path=${encodeURIComponent(image.path)}`}
+                          alt=""
+                          fill
+                          unoptimized
+                          sizes="48px"
+                          className="object-cover"
+                        />
+                        <span className="absolute bottom-0 left-0 right-0 bg-slate-950/75 py-0.5 text-[10px] font-bold text-white">
+                          {image.order}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>,
+            document.body,
+          )}
+      </>
     );
   }
   if (file.kind === "video") {
@@ -1258,6 +1586,96 @@ function PreviewVisual({
   );
 }
 
+function SceneTable({
+  project,
+  files,
+  onFileSelect,
+}: {
+  project: ProjectDocument;
+  files: readonly DashboardFile[];
+  onFileSelect: (fileId: string) => void;
+}) {
+  const assetLabel = (assetId: string | null) =>
+    assetId === null
+      ? "—"
+      : (project.assets.find((asset) => asset.id === assetId)?.label ?? assetId);
+
+  return (
+    <section aria-labelledby="scenes-heading" className="max-w-full min-w-0 overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.04)]">
+      <div className="flex flex-col gap-1.5 border-b border-slate-100 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-600">Scene plan</p>
+          <div className="mt-0.5 flex items-baseline gap-2">
+            <h2 id="scenes-heading" className="text-base font-extrabold text-slate-950">장면 구성표</h2>
+            <span className="text-xs font-bold text-slate-400">{project.scenes.length}개</span>
+          </div>
+        </div>
+        <p className="text-xs font-semibold text-slate-500">이미지 {project.scenes.filter((scene) => scene.image.status === "완료").length}/{project.scenes.length} 완료 · 영상 대상 {project.scenes.filter((scene) => scene.video.enabled).length}개</p>
+      </div>
+      <div className="max-w-full min-w-0 overflow-x-auto overscroll-x-contain">
+        <table className="w-full min-w-[984px] table-fixed border-collapse text-left text-sm">
+          <colgroup>
+            <col style={{ width: "6%" }} />
+            <col style={{ width: "8%" }} />
+            <col style={{ width: "26%" }} />
+            <col style={{ width: "24%" }} />
+            <col style={{ width: "14%" }} />
+            <col style={{ width: "9%" }} />
+            <col style={{ width: "7%" }} />
+            <col style={{ width: "6%" }} />
+          </colgroup>
+          <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-400">
+            <tr>
+              <th className="px-2 py-2">장면</th><th className="px-2 py-2">시간</th><th className="px-2 py-2">내레이션</th><th className="px-2 py-2">시각적 내용</th><th className="px-2 py-2">이미지</th><th className="px-2 py-2">영상 설정</th><th className="px-2 py-2">영상 상태</th><th className="px-2 py-2">오류·재시도</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {project.scenes.map((scene) => {
+              const imageFile = files.find((file) => file.id === scene.selectedImageAssetId);
+              const endScene = project.assets.find((asset) => asset.id === scene.video.endImageAssetId)?.sceneId;
+              return (
+                <tr key={scene.id} className="align-top hover:bg-slate-50/60">
+                  <td className="px-2 py-2"><span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-violet-100 font-black text-violet-700">{scene.order}</span></td>
+                  <td className="whitespace-nowrap px-2 py-2 font-bold text-slate-700">{scene.startSeconds}–{scene.startSeconds + scene.durationSeconds}초</td>
+                  <td className="wrap-break-word px-2 py-2 leading-4 text-slate-700">{scene.narration}</td>
+                  <td className="wrap-break-word px-2 py-2 leading-4 text-slate-600">{scene.visual || "—"}</td>
+                  <td className="px-2 py-2">
+                    <button type="button" disabled={!imageFile} onClick={() => imageFile && onFileSelect(imageFile.id)} className="flex w-full min-w-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-white p-1.5 text-left disabled:cursor-default">
+                      {imageFile?.status === "available" ? <span className="relative h-10 w-8 shrink-0 overflow-hidden rounded-md bg-slate-100"><Image src={`/api/projects/${project.project.id}/files/content?path=${encodeURIComponent(imageFile.relativePath)}`} alt="" fill unoptimized sizes="32px" className="object-cover" /></span> : <span className="flex h-10 w-8 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-400"><Icon name="image" className="h-4 w-4" /></span>}
+                      <span><span className={`block font-extrabold ${statusTextClass(scene.image.status)}`}>{scene.image.status}</span><span className="mt-0.5 block text-[11px] text-slate-400">{assetLabel(scene.selectedImageAssetId)}</span></span>
+                    </button>
+                  </td>
+                  <td className="px-2 py-2">
+                    {scene.video.enabled ? <div className="space-y-1"><span className="inline-flex rounded-full bg-violet-100 px-2 py-1 font-bold text-violet-700">영상 생성</span><p className="font-semibold text-slate-700">{scene.video.mode === "start_end" ? `${scene.order}번 → ${endScene ? Number(endScene.slice(-2)) : "?"}번 이미지` : `${scene.order}번 이미지 한 장`}</p></div> : <span className="text-slate-400">이미지 사용</span>}
+                  </td>
+                  <td className="px-2 py-2"><div className="flex items-center gap-1.5"><StatusMark status={scene.video.status} compact /><span className={`font-bold ${statusTextClass(scene.video.status)}`}>{scene.video.status}</span></div></td>
+                  <td className="wrap-break-word px-2 py-2 text-slate-500">{scene.image.error ?? scene.video.error ?? "없음"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function DetailPanel({ project, selectedStep, selectedFile, context }: { project: ProjectDocument; selectedStep: WorkflowStep; selectedFile: DashboardFile | undefined; context: PanelContext }) {
+  return (
+    <aside aria-labelledby="detail-heading" className="h-full min-w-0 overflow-y-auto rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)] sm:p-5">
+      <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-600">{context === "file" ? "File preview" : context === "script" ? "Script" : "Step detail"}</p>
+      <h2 id="detail-heading" className="mt-1 mb-4 truncate text-lg font-extrabold text-slate-950">{context === "file" ? "선택한 파일 미리보기" : context === "script" ? "대본·장면 구성" : "선택한 단계"}</h2>
+      {context === "script" ? (
+        <div className="space-y-3"><div className="rounded-2xl bg-linear-to-br from-violet-600 to-indigo-700 p-5 text-white"><p className="text-xs font-bold text-violet-200">전체 대본 · {project.script.targetDurationSeconds}초</p><h3 className="mt-2 text-xl font-black">{project.script.topic || "주제 미정"}</h3><p className="mt-4 max-h-72 overflow-auto text-sm leading-6 text-violet-50">{project.script.text || "대본이 없습니다."}</p></div><p className="rounded-xl bg-slate-50 p-3 text-xs font-semibold text-slate-600">장면 {project.scenes.length}개 · 이미지 대표 선택 {project.scenes.filter((scene) => scene.selectedImageAssetId).length}개</p></div>
+      ) : context === "file" && selectedFile ? (
+        <><div className="mb-3 flex items-center gap-3 rounded-xl bg-slate-50 p-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-white"><Icon name={fileIcon(selectedFile.kind)} /></span><div className="min-w-0"><p className="truncate text-sm font-extrabold text-slate-900">{selectedFile.label}</p><p className="mt-0.5 truncate text-xs text-slate-500">{selectedFile.relativePath}</p></div></div><PreviewVisual key={selectedFile.id} file={selectedFile} project={project} /><dl className="mt-4 grid grid-cols-[70px_minmax(0,1fr)] gap-2 rounded-xl bg-slate-50 p-4 text-xs"><dt className="text-slate-400">형식</dt><dd className="font-bold">{selectedFile.format}</dd><dt className="text-slate-400">크기</dt><dd className="font-bold">{formatFileSize(selectedFile.sizeBytes)}</dd><dt className="text-slate-400">상태</dt><dd className="font-bold text-emerald-600">{selectedFile.status === "available" ? "사용 가능" : "확인 필요"}</dd></dl></>
+      ) : (
+        <div className="rounded-2xl bg-linear-to-br from-violet-600 to-indigo-700 p-5 text-white"><div className="flex items-start justify-between"><span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15"><Icon name={stepIcons[selectedStep.id] ?? "sparkles"} className="h-7 w-7" /></span><StatusMark status={selectedStep.status} compact /></div><p className="mt-6 text-xs font-bold text-violet-200">선택한 제작 단계</p><h3 className="mt-1 text-xl font-black">{selectedStep.label}</h3><p className="mt-2 text-sm text-violet-100">{selectedStep.summary}</p><p className="mt-5 rounded-xl bg-white/10 p-3 text-xs leading-5">설정 내용은 표시만 하며 실제 실행은 각 서비스 구현 단계에서 연결됩니다.</p></div>
+      )}
+    </aside>
+  );
+}
+
 interface DashboardViewProps {
   project: ProjectDocument;
   projects: readonly ProjectSummary[];
@@ -1313,34 +1731,48 @@ function DashboardView({
     setPanelContext("file");
     setMobileSidebarOpen(false);
   };
+  const selectScript = () => {
+    setPanelContext("script");
+    setMobileSidebarOpen(false);
+  };
   const selectProject = (projectId: string) => {
     onProjectSelect(projectId);
     setMobileSidebarOpen(false);
   };
 
   return (
-    <div className="min-h-dvh bg-[#f5f6fa] text-slate-900">
-      <div className="flex min-h-dvh">
+    <div className="min-h-dvh w-full overflow-x-hidden bg-[#f5f6fa] text-slate-900">
+      <div className="flex min-h-dvh w-full min-w-0 overflow-x-hidden">
         <aside
-          className={`sticky top-0 hidden h-dvh shrink-0 border-r border-slate-200 bg-white transition-[width] duration-200 lg:block ${sidebarCollapsed ? "w-20.5" : "w-67.5"}`}
+          className={`fixed inset-y-0 left-0 z-40 hidden h-dvh border-r border-slate-200 bg-white transition-[width] duration-200 ease-out sm:block ${sidebarCollapsed ? "w-17 overflow-visible" : "w-67.5 overflow-hidden"}`}
         >
-          <SidebarContent
-            project={project}
-            projects={projects}
-            files={files}
-            collapsed={sidebarCollapsed}
-            searchQuery={searchQuery}
-            onSearchChange={onSearchChange}
-            onCreate={onCreate}
-            onProjectSelect={selectProject}
-            onCollapse={() => setSidebarCollapsed((value) => !value)}
-            onFileSelect={selectFile}
-            selectedFileId={selectedFileId}
-          />
+          <div
+            className={`h-full transition-[width] duration-200 ease-out ${sidebarCollapsed ? "w-17 overflow-visible" : "w-67.5 overflow-hidden"}`}
+          >
+            <SidebarContent
+              project={project}
+              projects={projects}
+              files={files}
+              collapsed={sidebarCollapsed}
+              searchQuery={searchQuery}
+              onSearchChange={onSearchChange}
+              onCreate={onCreate}
+              onProjectSelect={selectProject}
+              onCollapse={() => setSidebarCollapsed((value) => !value)}
+              onFileSelect={selectFile}
+              onScriptSelect={selectScript}
+              selectedFileId={selectedFileId}
+              scriptSelected={panelContext === "script"}
+            />
+          </div>
         </aside>
+        <div
+          aria-hidden="true"
+          className={`hidden shrink-0 transition-[width] duration-200 ease-out sm:block ${sidebarCollapsed ? "w-17" : "w-67.5"}`}
+        />
 
         {mobileSidebarOpen && (
-          <div className="fixed inset-0 z-50 lg:hidden">
+          <div className="fixed inset-0 z-50 sm:hidden">
             <button
               type="button"
               className="absolute inset-0 bg-slate-950/45 backdrop-blur-[2px]"
@@ -1367,14 +1799,18 @@ function DashboardView({
                 onProjectSelect={selectProject}
                 onCollapse={() => setMobileSidebarOpen(false)}
                 onFileSelect={selectFile}
+                onScriptSelect={selectScript}
                 selectedFileId={selectedFileId}
+                scriptSelected={panelContext === "script"}
               />
             </aside>
           </div>
         )}
 
-        <div className="min-w-0 flex-1">
-          <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200 bg-white/95 px-4 backdrop-blur lg:hidden">
+        <div
+          className={`dashboard-content min-w-0 overflow-x-hidden ${sidebarCollapsed ? "sidebar-collapsed" : "sidebar-expanded"}`}
+        >
+          <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200 bg-white/95 px-4 backdrop-blur sm:hidden">
             <button
               type="button"
               onClick={() => setMobileSidebarOpen(true)}
@@ -1401,7 +1837,7 @@ function DashboardView({
             </button>
           </header>
 
-          <main className="mx-auto w-full max-w-420 p-4 sm:p-5 xl:p-7">
+          <main className="w-full max-w-full min-w-0 overflow-x-hidden p-4 sm:p-5 xl:p-7">
             {(notice || error) && (
               <div
                 role={error ? "alert" : "status"}
@@ -1432,14 +1868,6 @@ function DashboardView({
                 </p>
               </div>
               <div className="hidden shrink-0 items-center gap-2 sm:flex">
-                <button
-                  type="button"
-                  onClick={() => setSidebarCollapsed(false)}
-                  className="inline-flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm"
-                >
-                  <Icon name="folderOpen" className="h-4 w-4" />
-                  사이드바 열기
-                </button>
                 <button
                   type="button"
                   disabled={busy}
@@ -1499,9 +1927,28 @@ function DashboardView({
               </button>
             </div>
 
+            <div
+              className="production-workspace mb-5 max-w-full min-w-0 gap-4"
+              style={{
+                display: "block",
+                position: "relative",
+                width: "100%",
+                maxWidth: "100%",
+                height: "clamp(26rem, calc(100dvh - 15rem), 32rem)",
+                minHeight: "26rem",
+                maxHeight: "32rem",
+                overflow: "hidden",
+              }}
+            >
             <section
               aria-labelledby="workflow-heading"
-              className="mb-5 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)] sm:p-5"
+              className="workflow-panel flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)] sm:p-5"
+              style={{
+                position: "absolute",
+                inset: "0 336px 0 0",
+                width: "auto",
+                minWidth: 0,
+              }}
             >
               <div className="mb-4 flex items-center justify-between gap-3">
                 <div>
@@ -1525,6 +1972,8 @@ function DashboardView({
                 </div>
               </div>
               <WorkflowEditor
+                key={project.project.id}
+                projectId={project.project.id}
                 steps={project.workflow.steps}
                 selectedStepId={
                   panelContext === "step" ? selectedStep.id : null
@@ -1535,239 +1984,26 @@ function DashboardView({
                 }}
               />
             </section>
-
-            <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_350px] 2xl:grid-cols-[minmax(0,1fr)_390px]">
-              <section
-                aria-labelledby="jobs-heading"
-                className="min-w-0 overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.04)]"
-              >
-                <div className="flex items-center justify-between border-b border-slate-100 px-4 py-4 sm:px-5">
-                  <div className="flex items-baseline gap-2">
-                    <h2
-                      id="jobs-heading"
-                      className="text-lg font-extrabold text-slate-950"
-                    >
-                      작업 목록
-                    </h2>
-                    <span className="text-xs font-bold text-slate-400">
-                      {project.runs.length}개
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600"
-                  >
-                    전체 상태
-                    <Icon name="chevron" className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-                <div className="hidden grid-cols-[100px_96px_minmax(200px,1fr)_110px_90px] gap-3 bg-slate-50 px-5 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-400 md:grid">
-                  <span>상태</span>
-                  <span>단계</span>
-                  <span>작업 내용</span>
-                  <span>시작 시간</span>
-                  <span>소요 시간</span>
-                </div>
-                <div className="divide-y divide-slate-100">
-                  {project.runs.map((run) => (
-                    <div
-                      key={run.id}
-                      className="grid gap-3 px-4 py-4 transition hover:bg-slate-50/70 sm:px-5 md:grid-cols-[100px_96px_minmax(200px,1fr)_110px_90px] md:items-center"
-                    >
-                      <div className="flex items-center gap-2">
-                        <StatusMark status={run.status} compact />
-                        <span
-                          className={`text-xs font-bold ${statusTextClass(run.status)}`}
-                        >
-                          {run.status}
-                        </span>
-                      </div>
-                      <span className="hidden text-sm font-extrabold text-slate-800 md:block">
-                        {project.workflow.steps.find(
-                          (step) => step.id === run.stageId,
-                        )?.label ?? run.stageId}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-bold text-slate-800">
-                          {run.label}
-                        </p>
-                        <p className="mt-0.5 truncate text-xs text-slate-500">
-                          {run.message}
-                        </p>
-                      </div>
-                      <div className="flex gap-4 text-xs text-slate-500 md:contents">
-                        <span>
-                          <span className="mr-1 text-slate-400 md:hidden">
-                            시작
-                          </span>
-                          {formatRunTime(run.startedAt)}
-                        </span>
-                        <span>
-                          <span className="mr-1 text-slate-400 md:hidden">
-                            소요
-                          </span>
-                          {formatRunDuration(run.startedAt, run.endedAt)}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </section>
-
-              <aside
-                aria-labelledby="detail-heading"
-                className="min-w-0 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)] sm:p-5"
-              >
-                <div className="mb-4 flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-600">
-                      {panelContext === "file" ? "File preview" : "Step detail"}
-                    </p>
-                    <h2
-                      id="detail-heading"
-                      className="mt-1 truncate text-lg font-extrabold text-slate-950"
-                    >
-                      {panelContext === "file"
-                        ? "선택한 파일 미리보기"
-                        : "선택한 단계"}
-                    </h2>
-                  </div>
-                  <button
-                    type="button"
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-500"
-                    aria-label="더 보기"
-                  >
-                    <Icon name="more" className="h-5 w-5" />
-                  </button>
-                </div>
-                {panelContext === "file" ? (
-                  <>
-                    <div className="mb-3 flex items-center gap-3 rounded-xl bg-slate-50 p-3">
-                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-white">
-                        <Icon name={fileIcon(selectedFile.kind)} />
-                      </span>
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-extrabold text-slate-900">
-                          {selectedFile.label}
-                        </p>
-                        <p className="mt-0.5 truncate text-xs text-slate-500">
-                          {selectedFile.relativePath}
-                        </p>
-                      </div>
-                    </div>
-                    <PreviewVisual
-                      key={selectedFile.id}
-                      file={selectedFile}
-                      project={project}
-                    />
-                    <dl className="mt-4 grid grid-cols-[82px_minmax(0,1fr)] gap-x-3 gap-y-2 rounded-xl bg-slate-50 p-4 text-xs">
-                      <dt className="font-semibold text-slate-400">파일명</dt>
-                      <dd className="truncate font-bold text-slate-800">
-                        {selectedFile.label}
-                      </dd>
-                      <dt className="font-semibold text-slate-400">형식</dt>
-                      <dd className="font-bold text-slate-800">
-                        {selectedFile.format}
-                      </dd>
-                      <dt className="font-semibold text-slate-400">경로</dt>
-                      <dd className="font-bold text-slate-800">
-                        {selectedFile.relativePath}
-                      </dd>
-                      <dt className="font-semibold text-slate-400">크기</dt>
-                      <dd className="font-bold text-slate-800">
-                        {formatFileSize(selectedFile.sizeBytes)}
-                      </dd>
-                      <dt className="font-semibold text-slate-400">
-                        생성 시각
-                      </dt>
-                      <dd className="font-bold text-slate-800">
-                        {formatFileDate(
-                          selectedFile.createdAt ?? selectedFile.modifiedAt,
-                        )}
-                      </dd>
-                      {(selectedFile.width || selectedFile.height) && (
-                        <>
-                          <dt className="font-semibold text-slate-400">
-                            해상도
-                          </dt>
-                          <dd className="font-bold text-slate-800">
-                            {selectedFile.width ?? "?"} ×{" "}
-                            {selectedFile.height ?? "?"}
-                          </dd>
-                        </>
-                      )}
-                      {selectedFile.durationSeconds !== undefined && (
-                        <>
-                          <dt className="font-semibold text-slate-400">길이</dt>
-                          <dd className="font-bold text-slate-800">
-                            {selectedFile.durationSeconds}초
-                          </dd>
-                        </>
-                      )}
-                      <dt className="font-semibold text-slate-400">상태</dt>
-                      <dd
-                        className={`font-bold ${selectedFile.status !== "available" || selectedFile.stale ? "text-amber-700" : "text-emerald-600"}`}
-                      >
-                        {selectedFile.status === "missing"
-                          ? "파일 누락"
-                          : selectedFile.status === "unsupported"
-                            ? "미지원 형식"
-                            : selectedFile.stale
-                              ? "오래됨 · 확인 필요"
-                              : "사용 가능"}
-                      </dd>
-                    </dl>
-                  </>
-                ) : (
-                  <>
-                    <div className="rounded-2xl bg-linear-to-br from-violet-600 to-indigo-700 p-5 text-white">
-                      <div className="flex items-start justify-between">
-                        <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15">
-                          <Icon
-                            name={stepIcons[selectedStep.id] ?? "sparkles"}
-                            className="h-7 w-7"
-                          />
-                        </span>
-                        <StatusMark status={selectedStep.status} compact />
-                      </div>
-                      <p className="mt-6 text-xs font-bold text-violet-200">
-                        선택한 제작 단계
-                      </p>
-                      <h3 className="mt-1 text-xl font-black">
-                        {selectedStep.label}
-                      </h3>
-                      <p className="mt-2 text-sm text-violet-100">
-                        {selectedStep.summary}
-                      </p>
-                    </div>
-                    <div className="mt-4 space-y-3">
-                      <div className="rounded-xl border border-slate-200 p-4">
-                        <p className="text-xs font-bold text-slate-400">
-                          현재 상태
-                        </p>
-                        <div className="mt-2 flex items-center gap-2">
-                          <StatusMark status={selectedStep.status} compact />
-                          <span
-                            className={`text-sm font-extrabold ${statusTextClass(selectedStep.status)}`}
-                          >
-                            {selectedStep.status}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="rounded-xl border border-dashed border-violet-200 bg-violet-50/60 p-4">
-                        <p className="text-sm font-extrabold text-violet-900">
-                          단계 설정과 실행
-                        </p>
-                        <p className="mt-1 text-xs leading-5 text-violet-700">
-                          상세 설정은 7단계, 실제 실행 흐름은 8단계에서
-                          연결됩니다.
-                        </p>
-                      </div>
-                    </div>
-                  </>
-                )}
-              </aside>
+            <div
+              className="preview-panel relative z-10 h-full min-h-0 min-w-0 overflow-hidden bg-[#f5f6fa]"
+              style={{
+                position: "absolute",
+                inset: "0 0 0 auto",
+                width: 320,
+                minWidth: 0,
+              }}
+            >
+              <DetailPanel
+                project={project}
+                selectedStep={selectedStep}
+                selectedFile={selectedFile}
+                context={panelContext}
+              />
             </div>
+            </div>
+
+            <SceneTable project={project} files={files} onFileSelect={selectFile} />
+
           </main>
         </div>
       </div>

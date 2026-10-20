@@ -99,9 +99,9 @@ projects/<project-id>/
 
 ## UI용 샘플 자산
 
-`fixtures/projects/sample-project.json`은 `project.json` v1 스키마를 따르는 표시·저장 검증용 fixture다. 앱은 Server Component에서 이 데이터를 런타임 검증한 뒤 UI에 전달한다. 저장 기능은 `lib/server/project-storage.ts`의 서버 전용 진입점을 사용한다.
+`fixtures/projects/sample-project/`는 `project.json` v2와 7개 장면 이미지를 함께 둔 표시·저장 검증용 프로젝트 fixture다. 참고 JSON처럼 이미지 검토와 영상화 대상 선택을 마친 상태이며, 실제 외부 AI 실행 기록과 구분된다. 기존 사용자 저장소에는 자동 삽입하지 않는다. 저장 기능은 `lib/server/project-storage.ts`의 서버 전용 진입점을 사용한다.
 
-샘플 미디어는 `public/samples/`에 있으며 외부 서비스 호출 없이 로컬 FFmpeg 소스로 생성했다.
+기존 파일 미리보기 회귀 검사용 미디어는 `public/samples/`에 유지한다.
 
 - `scene-01.png`: 360×640 세로 이미지
 - `clip-01.mp4`: 360×640 H.264 샘플 영상

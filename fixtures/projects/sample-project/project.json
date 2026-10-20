@@ -1,0 +1,574 @@
+{
+  "schemaVersion": 2,
+  "project": {
+    "id": "sample-space-project",
+    "name": "우주에서는 폭발음이 들릴까?",
+    "description": "이미지 생성과 영상화 장면 선택까지 마친 45초 과학 쇼츠 화면 확인용 샘플",
+    "createdAt": "2026-10-20T00:00:00.000Z",
+    "updatedAt": "2026-10-20T00:07:00.000Z",
+    "status": "확인 필요",
+    "settings": {
+      "targetDurationSeconds": 45,
+      "aspectRatio": "9:16",
+      "width": 1080,
+      "height": 1920,
+      "fps": 30
+    }
+  },
+  "workflow": {
+    "steps": [
+      {
+        "id": "script",
+        "label": "대본·장면 구성",
+        "order": 1,
+        "included": true,
+        "status": "완료",
+        "summary": "7개 장면",
+        "settings": {}
+      },
+      {
+        "id": "image",
+        "label": "이미지 생성",
+        "order": 2,
+        "included": true,
+        "status": "완료",
+        "summary": "대표 이미지 7개",
+        "settings": {}
+      },
+      {
+        "id": "video",
+        "label": "영상 생성",
+        "order": 3,
+        "included": true,
+        "status": "대기",
+        "summary": "대상 2개 선택",
+        "settings": {}
+      },
+      {
+        "id": "voice",
+        "label": "더빙",
+        "order": 4,
+        "included": true,
+        "status": "대기",
+        "summary": "실행 전",
+        "settings": {}
+      },
+      {
+        "id": "music",
+        "label": "배경음악",
+        "order": 5,
+        "included": true,
+        "status": "대기",
+        "summary": "실행 전",
+        "settings": {}
+      },
+      {
+        "id": "editing",
+        "label": "최종 편집",
+        "order": 6,
+        "included": true,
+        "status": "대기",
+        "summary": "실행 전",
+        "settings": {}
+      }
+    ]
+  },
+  "script": {
+    "provider": "openai",
+    "model": "gpt-5.4-mini",
+    "topic": "우주에서는 폭발음이 들릴까?",
+    "text": "우주에서 거대한 폭발이 일어난다면 어떤 소리가 날까요? 영화에서는 엄청난 폭발음이 들리지만, 실제 우주에서는 아무 소리도 들리지 않습니다. 도대체 왜 그럴까요? 소리는 공기나 물처럼 진동을 전달할 물질이 있어야 이동할 수 있습니다. 우리가 대화할 때도 목소리의 진동이 공기를 통해 귀까지 전달되는 거죠. 하지만 우주 공간은 대부분 진공에 가까운 상태입니다. 소리를 전달할 물질이 거의 없기 때문에 폭발이 일어나도 그 소리가 멀리 퍼지지 못하는 거예요. 그렇다면 우주비행사들은 어떻게 대화할까요? 우주복에 설치된 무선 통신 장치를 이용합니다. 목소리를 전기 신호로 바꾸고 이를 전파로 전달하기 때문에 우주에서도 서로 대화할 수 있는 거죠. 결국 영화 속 우주 폭발음은 관객을 위한 연출인 셈입니다. 실제 우주는 아주 고요한 공간이니까요.",
+    "targetDurationSeconds": 45,
+    "stale": {
+      "isStale": false
+    }
+  },
+  "scenes": [
+    {
+      "id": "scene-01",
+      "order": 1,
+      "startSeconds": 0,
+      "durationSeconds": 5,
+      "narration": "우주에서 거대한 폭발이 일어난다면 어떤 소리가 날까요?",
+      "visual": "어두운 우주 공간에서 거대한 폭발이 일어나는 장면",
+      "assetIds": [
+        "asset-image-scene-01"
+      ],
+      "selectedImageAssetId": "asset-image-scene-01",
+      "image": {
+        "endpoint": "fal-ai/recraft/v3/text-to-image",
+        "input": {
+          "prompt": "A massive fiery explosion near a distant planet in deep outer space, bright orange flames and glowing debris, dramatic cinematic lighting, photorealistic science fiction scene, vertical 9:16 composition, no text",
+          "image_size": "portrait_16_9",
+          "style": "realistic_image"
+        },
+        "status": "완료",
+        "error": null
+      },
+      "video": {
+        "enabled": true,
+        "mode": "start_end",
+        "startImageAssetId": "asset-image-scene-01",
+        "endImageAssetId": "asset-image-scene-02",
+        "endpoint": "fal-ai/kling-video/v3/standard/image-to-video",
+        "input": {
+          "prompt": "A massive explosion gradually settles as the camera pulls back into quiet deep space, transitioning smoothly into a peaceful starfield.",
+          "duration": "5",
+          "generate_audio": false
+        },
+        "status": "대기",
+        "selectedAssetId": null,
+        "error": null
+      },
+      "editing": {
+        "selectedMedia": "video",
+        "durationSeconds": 5,
+        "trimStartSeconds": 0
+      },
+      "stale": {
+        "isStale": false
+      }
+    },
+    {
+      "id": "scene-02",
+      "order": 2,
+      "startSeconds": 5,
+      "durationSeconds": 5,
+      "narration": "영화에서는 엄청난 폭발음이 들리지만, 실제 우주에서는 아무 소리도 들리지 않습니다.",
+      "visual": "폭발 이후 소리 없이 고요한 우주 공간",
+      "assetIds": [
+        "asset-image-scene-02"
+      ],
+      "selectedImageAssetId": "asset-image-scene-02",
+      "image": {
+        "endpoint": "fal-ai/recraft/v3/text-to-image",
+        "input": {
+          "prompt": "A vast and silent outer space scene after a spectacular explosion, distant stars, faint glowing nebulae, deep black cosmic vacuum, peaceful mysterious atmosphere, cinematic realistic photography, vertical 9:16 composition, no text",
+          "image_size": "portrait_16_9",
+          "style": "realistic_image"
+        },
+        "status": "완료",
+        "error": null
+      },
+      "video": {
+        "enabled": false,
+        "mode": null,
+        "startImageAssetId": null,
+        "endImageAssetId": null,
+        "endpoint": null,
+        "input": {},
+        "status": "대기",
+        "selectedAssetId": null,
+        "error": null
+      },
+      "editing": {
+        "selectedMedia": "image",
+        "durationSeconds": 5,
+        "trimStartSeconds": 0
+      },
+      "stale": {
+        "isStale": false
+      }
+    },
+    {
+      "id": "scene-03",
+      "order": 3,
+      "startSeconds": 10,
+      "durationSeconds": 6,
+      "narration": "도대체 왜 그럴까요? 소리는 공기나 물처럼 진동을 전달할 물질이 있어야 이동할 수 있습니다.",
+      "visual": "공기와 물을 통해 소리의 진동이 전달되는 원리",
+      "assetIds": [
+        "asset-image-scene-03"
+      ],
+      "selectedImageAssetId": "asset-image-scene-03",
+      "image": {
+        "endpoint": "fal-ai/recraft/v3/text-to-image",
+        "input": {
+          "prompt": "Scientific educational visualization of sound waves traveling through air and water, translucent particles forming compression waves, circular ripples spreading across clear water, realistic scientific illustration, dark blue background, vertical 9:16 composition, no text",
+          "image_size": "portrait_16_9",
+          "style": "realistic_image"
+        },
+        "status": "완료",
+        "error": null
+      },
+      "video": {
+        "enabled": false,
+        "mode": null,
+        "startImageAssetId": null,
+        "endImageAssetId": null,
+        "endpoint": null,
+        "input": {},
+        "status": "대기",
+        "selectedAssetId": null,
+        "error": null
+      },
+      "editing": {
+        "selectedMedia": "image",
+        "durationSeconds": 6,
+        "trimStartSeconds": 0
+      },
+      "stale": {
+        "isStale": false
+      }
+    },
+    {
+      "id": "scene-04",
+      "order": 4,
+      "startSeconds": 16,
+      "durationSeconds": 6,
+      "narration": "우리가 대화할 때도 목소리의 진동이 공기를 통해 귀까지 전달되는 거죠.",
+      "visual": "사람의 목소리가 공기를 통해 귀까지 전달되는 모습",
+      "assetIds": [
+        "asset-image-scene-04"
+      ],
+      "selectedImageAssetId": "asset-image-scene-04",
+      "image": {
+        "endpoint": "fal-ai/recraft/v3/text-to-image",
+        "input": {
+          "prompt": "Educational scientific illustration showing a person speaking and transparent sound waves traveling through the air toward a human ear, visible wave patterns, realistic anatomical representation, clean composition, vertical 9:16 format, no text",
+          "image_size": "portrait_16_9",
+          "style": "realistic_image"
+        },
+        "status": "완료",
+        "error": null
+      },
+      "video": {
+        "enabled": false,
+        "mode": null,
+        "startImageAssetId": null,
+        "endImageAssetId": null,
+        "endpoint": null,
+        "input": {},
+        "status": "대기",
+        "selectedAssetId": null,
+        "error": null
+      },
+      "editing": {
+        "selectedMedia": "image",
+        "durationSeconds": 6,
+        "trimStartSeconds": 0
+      },
+      "stale": {
+        "isStale": false
+      }
+    },
+    {
+      "id": "scene-05",
+      "order": 5,
+      "startSeconds": 22,
+      "durationSeconds": 8,
+      "narration": "하지만 우주 공간은 대부분 진공에 가까운 상태입니다. 소리를 전달할 물질이 거의 없기 때문에 폭발이 일어나도 그 소리가 멀리 퍼지지 못하는 거예요.",
+      "visual": "광활하고 텅 빈 우주 공간에 멀리 떨어진 작은 폭발",
+      "assetIds": [
+        "asset-image-scene-05"
+      ],
+      "selectedImageAssetId": "asset-image-scene-05",
+      "image": {
+        "endpoint": "fal-ai/recraft/v3/text-to-image",
+        "input": {
+          "prompt": "An immense empty region of deep space representing a near-perfect vacuum, a tiny distant explosion surrounded by vast darkness, sparse stars, extreme sense of emptiness and silence, cinematic astrophotography, vertical 9:16 composition, no text",
+          "image_size": "portrait_16_9",
+          "style": "realistic_image"
+        },
+        "status": "완료",
+        "error": null
+      },
+      "video": {
+        "enabled": false,
+        "mode": null,
+        "startImageAssetId": null,
+        "endImageAssetId": null,
+        "endpoint": null,
+        "input": {},
+        "status": "대기",
+        "selectedAssetId": null,
+        "error": null
+      },
+      "editing": {
+        "selectedMedia": "image",
+        "durationSeconds": 8,
+        "trimStartSeconds": 0
+      },
+      "stale": {
+        "isStale": false
+      }
+    },
+    {
+      "id": "scene-06",
+      "order": 6,
+      "startSeconds": 30,
+      "durationSeconds": 7,
+      "narration": "그렇다면 우주비행사들은 어떻게 대화할까요? 우주복에 설치된 무선 통신 장치를 이용합니다.",
+      "visual": "우주 공간에서 서로 무선 통신하는 우주비행사",
+      "assetIds": [
+        "asset-image-scene-06"
+      ],
+      "selectedImageAssetId": "asset-image-scene-06",
+      "image": {
+        "endpoint": "fal-ai/recraft/v3/text-to-image",
+        "input": {
+          "prompt": "Two astronauts wearing realistic white spacesuits floating near a space station above planet Earth, communicating through helmet radio systems, beautiful blue Earth in the background, realistic cinematic space photography, vertical 9:16 composition, no text",
+          "image_size": "portrait_16_9",
+          "style": "realistic_image"
+        },
+        "status": "완료",
+        "error": null
+      },
+      "video": {
+        "enabled": true,
+        "mode": "start_only",
+        "startImageAssetId": "asset-image-scene-06",
+        "endImageAssetId": null,
+        "endpoint": "fal-ai/kling-video/v3/standard/image-to-video",
+        "input": {
+          "prompt": "Two astronauts float gently near a space station and turn slightly toward each other while Earth slowly rotates behind them. Smooth cinematic motion.",
+          "duration": "7",
+          "generate_audio": false
+        },
+        "status": "대기",
+        "selectedAssetId": null,
+        "error": null
+      },
+      "editing": {
+        "selectedMedia": "video",
+        "durationSeconds": 7,
+        "trimStartSeconds": 0
+      },
+      "stale": {
+        "isStale": false
+      }
+    },
+    {
+      "id": "scene-07",
+      "order": 7,
+      "startSeconds": 37,
+      "durationSeconds": 8,
+      "narration": "목소리를 전기 신호로 바꾸고 이를 전파로 전달하기 때문에 우주에서도 서로 대화할 수 있는 거죠. 결국 영화 속 우주 폭발음은 관객을 위한 연출인 셈입니다. 실제 우주는 아주 고요한 공간이니까요.",
+      "visual": "지구와 우주비행사의 무선 통신, 고요한 우주 풍경",
+      "assetIds": [
+        "asset-image-scene-07"
+      ],
+      "selectedImageAssetId": "asset-image-scene-07",
+      "image": {
+        "endpoint": "fal-ai/recraft/v3/text-to-image",
+        "input": {
+          "prompt": "A peaceful cinematic view of Earth from deep space with a small astronaut floating above the planet, subtle visual representation of radio waves traveling toward Earth, vast silent cosmic background, realistic space photography, vertical 9:16 composition, no text",
+          "image_size": "portrait_16_9",
+          "style": "realistic_image"
+        },
+        "status": "완료",
+        "error": null
+      },
+      "video": {
+        "enabled": false,
+        "mode": null,
+        "startImageAssetId": null,
+        "endImageAssetId": null,
+        "endpoint": null,
+        "input": {},
+        "status": "대기",
+        "selectedAssetId": null,
+        "error": null
+      },
+      "editing": {
+        "selectedMedia": "image",
+        "durationSeconds": 8,
+        "trimStartSeconds": 0
+      },
+      "stale": {
+        "isStale": false
+      }
+    }
+  ],
+  "assets": [
+    {
+      "id": "asset-image-scene-01",
+      "label": "1번 장면 대표 이미지",
+      "kind": "image",
+      "role": "scene-image",
+      "stageId": "image",
+      "sceneId": "scene-01",
+      "relativePath": "images/scene-01/image-01.webp",
+      "createdAt": "2026-10-20T00:01:00.000Z",
+      "selected": true,
+      "sourceAssetIds": [],
+      "stale": {
+        "isStale": false
+      },
+      "metadata": {
+        "format": "WEBP · 화면 확인용",
+        "width": 540,
+        "height": 960
+      }
+    },
+    {
+      "id": "asset-image-scene-02",
+      "label": "2번 장면 대표 이미지",
+      "kind": "image",
+      "role": "scene-image",
+      "stageId": "image",
+      "sceneId": "scene-02",
+      "relativePath": "images/scene-02/image-01.webp",
+      "createdAt": "2026-10-20T00:02:00.000Z",
+      "selected": true,
+      "sourceAssetIds": [],
+      "stale": {
+        "isStale": false
+      },
+      "metadata": {
+        "format": "WEBP · 화면 확인용",
+        "width": 540,
+        "height": 960
+      }
+    },
+    {
+      "id": "asset-image-scene-03",
+      "label": "3번 장면 대표 이미지",
+      "kind": "image",
+      "role": "scene-image",
+      "stageId": "image",
+      "sceneId": "scene-03",
+      "relativePath": "images/scene-03/image-01.webp",
+      "createdAt": "2026-10-20T00:03:00.000Z",
+      "selected": true,
+      "sourceAssetIds": [],
+      "stale": {
+        "isStale": false
+      },
+      "metadata": {
+        "format": "WEBP · 화면 확인용",
+        "width": 540,
+        "height": 960
+      }
+    },
+    {
+      "id": "asset-image-scene-04",
+      "label": "4번 장면 대표 이미지",
+      "kind": "image",
+      "role": "scene-image",
+      "stageId": "image",
+      "sceneId": "scene-04",
+      "relativePath": "images/scene-04/image-01.webp",
+      "createdAt": "2026-10-20T00:04:00.000Z",
+      "selected": true,
+      "sourceAssetIds": [],
+      "stale": {
+        "isStale": false
+      },
+      "metadata": {
+        "format": "WEBP · 화면 확인용",
+        "width": 540,
+        "height": 960
+      }
+    },
+    {
+      "id": "asset-image-scene-05",
+      "label": "5번 장면 대표 이미지",
+      "kind": "image",
+      "role": "scene-image",
+      "stageId": "image",
+      "sceneId": "scene-05",
+      "relativePath": "images/scene-05/image-01.webp",
+      "createdAt": "2026-10-20T00:05:00.000Z",
+      "selected": true,
+      "sourceAssetIds": [],
+      "stale": {
+        "isStale": false
+      },
+      "metadata": {
+        "format": "WEBP · 화면 확인용",
+        "width": 540,
+        "height": 960
+      }
+    },
+    {
+      "id": "asset-image-scene-06",
+      "label": "6번 장면 대표 이미지",
+      "kind": "image",
+      "role": "scene-image",
+      "stageId": "image",
+      "sceneId": "scene-06",
+      "relativePath": "images/scene-06/image-01.webp",
+      "createdAt": "2026-10-20T00:06:00.000Z",
+      "selected": true,
+      "sourceAssetIds": [],
+      "stale": {
+        "isStale": false
+      },
+      "metadata": {
+        "format": "WEBP · 화면 확인용",
+        "width": 539,
+        "height": 960
+      }
+    },
+    {
+      "id": "asset-image-scene-07",
+      "label": "7번 장면 대표 이미지",
+      "kind": "image",
+      "role": "scene-image",
+      "stageId": "image",
+      "sceneId": "scene-07",
+      "relativePath": "images/scene-07/image-01.webp",
+      "createdAt": "2026-10-20T00:07:00.000Z",
+      "selected": true,
+      "sourceAssetIds": [],
+      "stale": {
+        "isStale": false
+      },
+      "metadata": {
+        "format": "WEBP · 화면 확인용",
+        "width": 540,
+        "height": 960
+      }
+    }
+  ],
+  "runs": [],
+  "voice": {
+    "provider": "fal.ai",
+    "model": "ElevenLabs Multilingual v2",
+    "endpoint": "fal-ai/elevenlabs/tts/multilingual-v2",
+    "inputSource": "script.text",
+    "input": {
+      "voice": "Rachel",
+      "language_code": "ko",
+      "stability": 0.5,
+      "similarity_boost": 0.75,
+      "speed": 1
+    },
+    "status": "대기",
+    "assetIds": [],
+    "selectedAssetId": null,
+    "error": null
+  },
+  "music": {
+    "provider": "fal.ai",
+    "model": "Stable Audio 2.5",
+    "endpoint": "fal-ai/stable-audio-25/text-to-audio",
+    "input": {
+      "prompt": "Cinematic ambient instrumental background music for an educational documentary about sound in outer space, mysterious atmospheric synthesizer pads, subtle cosmic textures, calm and immersive mood, no vocals",
+      "seconds_total": 45
+    },
+    "status": "대기",
+    "assetIds": [],
+    "selectedAssetId": null,
+    "error": null
+  },
+  "editing": {
+    "status": "대기",
+    "error": null
+  },
+  "output": {
+    "status": "대기",
+    "assetId": null,
+    "stale": {
+      "isStale": false
+    },
+    "settings": {
+      "aspectRatio": "9:16",
+      "width": 1080,
+      "height": 1920,
+      "narrationVolume": 1,
+      "musicVolume": 0.25
+    }
+  }
+}
