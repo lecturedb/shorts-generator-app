@@ -99,6 +99,7 @@ test("생성 결과는 영상 계획을 비우고 기존 자산은 오래된 상
     project,
     settings,
     "gpt-5.4-mini",
+    "fal-ai/flux-2/flash",
     parseScriptGenerationResult(validResult(), settings),
     runId,
     "2026-10-21T00:01:00.000Z",
@@ -109,6 +110,7 @@ test("생성 결과는 영상 계획을 비우고 기존 자산은 오래된 상
   assert.equal(validated.assets.length, beforeAssetCount);
   assert.equal(validated.assets.every((asset) => asset.stale.isStale), true);
   assert.equal(validated.scenes.every((scene) => !scene.video.enabled), true);
+  assert.equal(validated.scenes.every((scene) => scene.image.endpoint === "fal-ai/flux-2/flash"), true);
   assert.equal(validated.scenes.every((scene) => scene.video.endpoint === null), true);
   assert.equal(validated.scenes.every((scene) => Object.keys(scene.video.input).length === 0), true);
   assert.equal(validated.runs.find((run) => run.id === runId)?.status, "완료");

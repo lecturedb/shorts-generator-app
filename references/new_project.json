@@ -26,11 +26,10 @@
       "narration": "우주에서 거대한 폭발이 일어난다면 어떤 소리가 날까요?",
       "visual": "어두운 우주 공간에서 거대한 폭발이 일어나는 장면",
       "image": {
-        "endpoint": "fal-ai/recraft/v3/text-to-image",
+        "endpoint": "fal-ai/flux-2/flash",
         "input": {
           "prompt": "A massive fiery explosion near a distant planet in deep outer space, bright orange flames and glowing debris, dramatic cinematic lighting, photorealistic science fiction scene, vertical 9:16 composition, no text",
-          "image_size": "portrait_16_9",
-          "style": "realistic_image"
+          "image_size": "portrait_16_9"
         },
         "status": "completed",
         "outputs": [
@@ -71,11 +70,10 @@
       "narration": "영화에서는 엄청난 폭발음이 들리지만, 실제 우주에서는 아무 소리도 들리지 않습니다.",
       "visual": "폭발 이후 소리 없이 고요한 우주 공간",
       "image": {
-        "endpoint": "fal-ai/recraft/v3/text-to-image",
+        "endpoint": "fal-ai/flux-2/flash",
         "input": {
           "prompt": "A vast and silent outer space scene after a spectacular explosion, distant stars, faint glowing nebulae, deep black cosmic vacuum, peaceful mysterious atmosphere, cinematic realistic photography, vertical 9:16 composition, no text",
-          "image_size": "portrait_16_9",
-          "style": "realistic_image"
+          "image_size": "portrait_16_9"
         },
         "status": "completed",
         "outputs": [
@@ -102,11 +100,10 @@
       "narration": "도대체 왜 그럴까요? 소리는 공기나 물처럼 진동을 전달할 물질이 있어야 이동할 수 있습니다.",
       "visual": "공기와 물을 통해 소리의 진동이 전달되는 원리",
       "image": {
-        "endpoint": "fal-ai/recraft/v3/text-to-image",
+        "endpoint": "fal-ai/flux-2/flash",
         "input": {
           "prompt": "Scientific educational visualization of sound waves traveling through air and water, translucent particles forming compression waves, circular ripples spreading across clear water, realistic scientific illustration, dark blue background, vertical 9:16 composition, no text",
-          "image_size": "portrait_16_9",
-          "style": "realistic_image"
+          "image_size": "portrait_16_9"
         },
         "status": "completed",
         "outputs": [
@@ -133,11 +130,10 @@
       "narration": "우리가 대화할 때도 목소리의 진동이 공기를 통해 귀까지 전달되는 거죠.",
       "visual": "사람의 목소리가 공기를 통해 귀까지 전달되는 모습",
       "image": {
-        "endpoint": "fal-ai/recraft/v3/text-to-image",
+        "endpoint": "fal-ai/flux-2/flash",
         "input": {
           "prompt": "Educational scientific illustration showing a person speaking and transparent sound waves traveling through the air toward a human ear, visible wave patterns, realistic anatomical representation, clean composition, vertical 9:16 format, no text",
-          "image_size": "portrait_16_9",
-          "style": "realistic_image"
+          "image_size": "portrait_16_9"
         },
         "status": "completed",
         "outputs": [
@@ -164,11 +160,10 @@
       "narration": "하지만 우주 공간은 대부분 진공에 가까운 상태입니다. 소리를 전달할 물질이 거의 없기 때문에 폭발이 일어나도 그 소리가 멀리 퍼지지 못하는 거예요.",
       "visual": "광활하고 텅 빈 우주 공간에 멀리 떨어진 작은 폭발",
       "image": {
-        "endpoint": "fal-ai/recraft/v3/text-to-image",
+        "endpoint": "fal-ai/flux-2/flash",
         "input": {
           "prompt": "An immense empty region of deep space representing a near-perfect vacuum, a tiny distant explosion surrounded by vast darkness, sparse stars, extreme sense of emptiness and silence, cinematic astrophotography, vertical 9:16 composition, no text",
-          "image_size": "portrait_16_9",
-          "style": "realistic_image"
+          "image_size": "portrait_16_9"
         },
         "status": "completed",
         "outputs": [
@@ -195,11 +190,10 @@
       "narration": "그렇다면 우주비행사들은 어떻게 대화할까요? 우주복에 설치된 무선 통신 장치를 이용합니다.",
       "visual": "우주 공간에서 서로 무선 통신하는 우주비행사",
       "image": {
-        "endpoint": "fal-ai/recraft/v3/text-to-image",
+        "endpoint": "fal-ai/flux-2/flash",
         "input": {
           "prompt": "Two astronauts wearing realistic white spacesuits floating near a space station above planet Earth, communicating through helmet radio systems, beautiful blue Earth in the background, realistic cinematic space photography, vertical 9:16 composition, no text",
-          "image_size": "portrait_16_9",
-          "style": "realistic_image"
+          "image_size": "portrait_16_9"
         },
         "status": "completed",
         "outputs": [
@@ -240,11 +234,10 @@
       "narration": "목소리를 전기 신호로 바꾸고 이를 전파로 전달하기 때문에 우주에서도 서로 대화할 수 있는 거죠. 결국 영화 속 우주 폭발음은 관객을 위한 연출인 셈입니다. 실제 우주는 아주 고요한 공간이니까요.",
       "visual": "지구와 우주비행사의 무선 통신, 고요한 우주 풍경",
       "image": {
-        "endpoint": "fal-ai/recraft/v3/text-to-image",
+        "endpoint": "fal-ai/flux-2/flash",
         "input": {
           "prompt": "A peaceful cinematic view of Earth from deep space with a small astronaut floating above the planet, subtle visual representation of radio waves traveling toward Earth, vast silent cosmic background, realistic space photography, vertical 9:16 composition, no text",
-          "image_size": "portrait_16_9",
-          "style": "realistic_image"
+          "image_size": "portrait_16_9"
         },
         "status": "completed",
         "outputs": [

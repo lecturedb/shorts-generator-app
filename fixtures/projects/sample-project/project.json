@@ -96,11 +96,10 @@
       ],
       "selectedImageAssetId": "asset-image-scene-01",
       "image": {
-        "endpoint": "fal-ai/recraft/v3/text-to-image",
+        "endpoint": "fal-ai/flux-2/flash",
         "input": {
           "prompt": "A massive fiery explosion near a distant planet in deep outer space, bright orange flames and glowing debris, dramatic cinematic lighting, photorealistic science fiction scene, vertical 9:16 composition, no text",
-          "image_size": "portrait_16_9",
-          "style": "realistic_image"
+          "image_size": "portrait_16_9"
         },
         "status": "완료",
         "error": null
@@ -141,11 +140,10 @@
       ],
       "selectedImageAssetId": "asset-image-scene-02",
       "image": {
-        "endpoint": "fal-ai/recraft/v3/text-to-image",
+        "endpoint": "fal-ai/flux-2/flash",
         "input": {
           "prompt": "A vast and silent outer space scene after a spectacular explosion, distant stars, faint glowing nebulae, deep black cosmic vacuum, peaceful mysterious atmosphere, cinematic realistic photography, vertical 9:16 composition, no text",
-          "image_size": "portrait_16_9",
-          "style": "realistic_image"
+          "image_size": "portrait_16_9"
         },
         "status": "완료",
         "error": null
@@ -182,11 +180,10 @@
       ],
       "selectedImageAssetId": "asset-image-scene-03",
       "image": {
-        "endpoint": "fal-ai/recraft/v3/text-to-image",
+        "endpoint": "fal-ai/flux-2/flash",
         "input": {
           "prompt": "Scientific educational visualization of sound waves traveling through air and water, translucent particles forming compression waves, circular ripples spreading across clear water, realistic scientific illustration, dark blue background, vertical 9:16 composition, no text",
-          "image_size": "portrait_16_9",
-          "style": "realistic_image"
+          "image_size": "portrait_16_9"
         },
         "status": "완료",
         "error": null
@@ -223,11 +220,10 @@
       ],
       "selectedImageAssetId": "asset-image-scene-04",
       "image": {
-        "endpoint": "fal-ai/recraft/v3/text-to-image",
+        "endpoint": "fal-ai/flux-2/flash",
         "input": {
           "prompt": "Educational scientific illustration showing a person speaking and transparent sound waves traveling through the air toward a human ear, visible wave patterns, realistic anatomical representation, clean composition, vertical 9:16 format, no text",
-          "image_size": "portrait_16_9",
-          "style": "realistic_image"
+          "image_size": "portrait_16_9"
         },
         "status": "완료",
         "error": null
@@ -264,11 +260,10 @@
       ],
       "selectedImageAssetId": "asset-image-scene-05",
       "image": {
-        "endpoint": "fal-ai/recraft/v3/text-to-image",
+        "endpoint": "fal-ai/flux-2/flash",
         "input": {
           "prompt": "An immense empty region of deep space representing a near-perfect vacuum, a tiny distant explosion surrounded by vast darkness, sparse stars, extreme sense of emptiness and silence, cinematic astrophotography, vertical 9:16 composition, no text",
-          "image_size": "portrait_16_9",
-          "style": "realistic_image"
+          "image_size": "portrait_16_9"
         },
         "status": "완료",
         "error": null
@@ -305,11 +300,10 @@
       ],
       "selectedImageAssetId": "asset-image-scene-06",
       "image": {
-        "endpoint": "fal-ai/recraft/v3/text-to-image",
+        "endpoint": "fal-ai/flux-2/flash",
         "input": {
           "prompt": "Two astronauts wearing realistic white spacesuits floating near a space station above planet Earth, communicating through helmet radio systems, beautiful blue Earth in the background, realistic cinematic space photography, vertical 9:16 composition, no text",
-          "image_size": "portrait_16_9",
-          "style": "realistic_image"
+          "image_size": "portrait_16_9"
         },
         "status": "완료",
         "error": null
@@ -350,11 +344,10 @@
       ],
       "selectedImageAssetId": "asset-image-scene-07",
       "image": {
-        "endpoint": "fal-ai/recraft/v3/text-to-image",
+        "endpoint": "fal-ai/flux-2/flash",
         "input": {
           "prompt": "A peaceful cinematic view of Earth from deep space with a small astronaut floating above the planet, subtle visual representation of radio waves traveling toward Earth, vast silent cosmic background, realistic space photography, vertical 9:16 composition, no text",
-          "image_size": "portrait_16_9",
-          "style": "realistic_image"
+          "image_size": "portrait_16_9"
         },
         "status": "완료",
         "error": null

@@ -29,6 +29,7 @@ export function applyGeneratedScriptResult(
   project: ProjectDocument,
   input: ScriptGenerationInput,
   model: string,
+  imageModel: string,
   result: ScriptGenerationResult,
   runId: string,
   now = new Date().toISOString(),
@@ -66,8 +67,8 @@ export function applyGeneratedScriptResult(
       assetIds: existingAssets,
       selectedImageAssetId: existingImage?.id ?? null,
       image: {
-        endpoint: "fal-ai/recraft/v3/text-to-image",
-        input: { prompt: scene.imagePrompt, image_size: "portrait_16_9", style: "realistic_image" },
+        endpoint: imageModel,
+        input: { prompt: scene.imagePrompt, image_size: "portrait_16_9" },
         status: existingImage ? "확인 필요" as const : "대기" as const,
         error: null,
       },

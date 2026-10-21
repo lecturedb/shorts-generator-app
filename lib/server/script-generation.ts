@@ -77,9 +77,10 @@ export async function performScriptGeneration(
   try {
     const input = parseScriptGenerationInput(rawInput);
     const generated = await generateScriptWithOpenAI(input);
+    const imageModel = process.env.FAL_IMAGE_MODEL?.trim() ?? "";
     const latest = await loadProjectDocument(projectId);
     if (runStatus(latest, runId) !== "실행 중") return;
-    await saveProjectDocument(applyGeneratedScriptResult(latest, input, generated.model, generated.result, runId));
+    await saveProjectDocument(applyGeneratedScriptResult(latest, input, generated.model, imageModel, generated.result, runId));
   } catch (error) {
     const latest = await loadProjectDocument(projectId).catch(() => null);
     if (latest) {
