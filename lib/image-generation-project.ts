@@ -49,6 +49,9 @@ export function applyImageConfiguration(
     }
   } else if (action.action === "set-video-plan") {
     if (!action.enabled) {
+      for (const asset of next.assets) {
+        if (asset.role === "scene-video" && asset.sceneId === scene.id) asset.selected = false;
+      }
       scene.video = {
         enabled: false,
         mode: null,
@@ -60,6 +63,7 @@ export function applyImageConfiguration(
         selectedAssetId: null,
         error: null,
       };
+      scene.editing.selectedMedia = "image";
     } else {
       if (action.mode === null || action.startImageAssetId === null) throw new Error("영상화할 장면에는 시작 이미지와 모드가 필요합니다.");
       imageAsset(next, action.startImageAssetId);

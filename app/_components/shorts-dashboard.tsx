@@ -6,6 +6,7 @@ import type { ProjectDeletionResult, ProjectListResult, ProjectMutationResult, P
 import type { ProjectDocument } from "@/lib/project-schema";
 import type { ScriptGenerationInput, ScriptGenerationRunResult } from "@/lib/script-generation-types";
 import type { ImageConfigurationAction, ImageGenerationRunResult } from "@/lib/image-generation-types";
+import type { VideoConfigurationAction, VideoGenerationRunResult } from "@/lib/video-generation-types";
 import { DashboardView } from "./shorts-dashboard-view";
 import { Icon } from "./shorts-dashboard-shared";
 
@@ -74,7 +75,7 @@ function EmptyWorkspace({
     </main>
   );
 }
-export function ShortsDashboard({ configuredImageModel }: { configuredImageModel: string | null }) {
+export function ShortsDashboard({ configuredImageModel, configuredVideoModel }: { configuredImageModel: string | null; configuredVideoModel: string | null }) {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [project, setProject] = useState<ProjectDocument | null>(null);
   const [files, setFiles] = useState<ProjectFileEntry[]>([]);
@@ -363,6 +364,59 @@ export function ShortsDashboard({ configuredImageModel }: { configuredImageModel
     }
   };
 
+  const generateVideos = async (sceneIds?: string[]) => {
+    if (!project) return;
+    setBusy(true);
+    setError(null);
+    setNotice(sceneIds ? "선택한 장면 영상을 fal.ai에 요청했습니다." : "영상 대상으로 지정한 장면들을 fal.ai에 요청했습니다.");
+    try {
+      const started = await requestJson<VideoGenerationRunResult>(`/api/projects/${project.project.id}/video-runs`, {
+        method: "POST",
+        body: JSON.stringify({ requestId: crypto.randomUUID(), ...(sceneIds ? { sceneIds } : {}) }),
+      });
+      setProject(started.project);
+      let latest = started;
+      for (let attempt = 0; attempt < 600 && latest.status === "실행 중"; attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 1_000));
+        const status = await requestJson<VideoGenerationRunResult & { projects: ProjectSummary[] }>(
+          `/api/projects/${project.project.id}/video-runs/${started.runId}`,
+        );
+        latest = status;
+        setProject(status.project);
+        setProjects(status.projects);
+      }
+      await refreshFiles(project.project.id);
+      const run = latest.project.runs.find((candidate) => candidate.id === latest.runId);
+      if (latest.status === "완료") setNotice(run?.message ?? "영상을 생성해 프로젝트에 저장했습니다.");
+      else if (latest.status === "실패" || latest.status === "확인 필요") throw new Error(run?.errorSummary ?? run?.message ?? "영상 생성 결과를 확인해 주세요.");
+      else setNotice("영상 생성은 서버에서 계속 진행 중입니다. 프로젝트를 다시 열어 상태를 확인할 수 있습니다.");
+    } catch (caught) {
+      showError(caught);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const updateVideoConfiguration = async (action: VideoConfigurationAction) => {
+    if (!project) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await requestJson<ProjectMutationResult>(`/api/projects/${project.project.id}/video-configuration`, {
+        method: "PATCH",
+        body: JSON.stringify(action),
+      });
+      setProject(result.project);
+      setProjects(result.projects);
+      await refreshFiles(project.project.id);
+      setNotice("대표 영상 후보를 저장했습니다.");
+    } catch (caught) {
+      showError(caught);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const deleteCurrentProject = async () => {
     if (!project) return;
     const confirmed = window.confirm(
@@ -439,7 +493,10 @@ export function ShortsDashboard({ configuredImageModel }: { configuredImageModel
       onGenerateImages={(sceneIds) => void generateImages(sceneIds)}
       onImageConfiguration={(action) => void updateImageConfiguration(action)}
       onGenerateVideoPrompts={() => void generateVideoPrompts()}
+      onGenerateVideos={(sceneIds) => void generateVideos(sceneIds)}
+      onVideoConfiguration={(action) => void updateVideoConfiguration(action)}
       configuredImageModel={configuredImageModel}
+      configuredVideoModel={configuredVideoModel}
     />
   );
 }

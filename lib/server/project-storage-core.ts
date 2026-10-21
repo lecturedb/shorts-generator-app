@@ -205,6 +205,7 @@ export async function listProjectFiles(projectId: string, options: ProjectStorag
     async function visit(directory: string): Promise<void> {
       const entries = await readdir(directory, { withFileTypes: true });
       for (const entry of entries) {
+        if (entry.name === ".DS_Store") continue;
         if (entry.name.startsWith(".project-") && entry.name.endsWith(".tmp")) continue;
         const absolutePath = path.join(directory, entry.name);
         if (entry.isSymbolicLink()) {

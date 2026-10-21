@@ -1,5 +1,5 @@
 import {
-  ChevronDown, FileText, Folder, FolderOpen, House, Image as ImageIcon,
+  Check, ChevronDown, Copy, FileText, Folder, FolderOpen, House, Image as ImageIcon,
   LayoutGrid, Maximize2, Menu, Mic, Music, Pencil, Play, Plus, Save,
   Search, Settings, Sparkles, Trash2, Video, WandSparkles, X,
   type LucideIcon,
@@ -10,8 +10,10 @@ import type { ProjectDocument } from "@/lib/project-schema";
 
 export type IconName =
   | "audio"
+  | "check"
   | "chevron"
   | "close"
+  | "copy"
   | "document"
   | "edit"
   | "expand"
@@ -148,8 +150,10 @@ export const stepIcons: Record<string, IconName> = {
 
 export const icons: Record<IconName, LucideIcon> = {
   audio: Mic,
+  check: Check,
   chevron: ChevronDown,
   close: X,
+  copy: Copy,
   document: FileText,
   edit: Pencil,
   expand: Maximize2,
@@ -289,7 +293,7 @@ export function providerModelLabel(provider: string | null, model: string | null
   return { provider: providerLabel ?? "제공사업자 미상", model };
 }
 
-export function workflowModelLabel(project: ProjectDocument, stepId: string, configuredImageModel: string | null = null) {
+export function workflowModelLabel(project: ProjectDocument, stepId: string, configuredImageModel: string | null = null, configuredVideoModel: string | null = null) {
   if (stepId === "script") {
     return providerModelLabel(project.script.provider, project.script.model);
   }
@@ -303,6 +307,11 @@ export function workflowModelLabel(project: ProjectDocument, stepId: string, con
     const step = project.workflow.steps.find((candidate) => candidate.id === "image");
     const configuredModel = typeof step?.settings.model === "string" ? step.settings.model : null;
     return { provider: "fal.ai", model: configuredModel ?? configuredImageModel ?? "모델 미설정" };
+  }
+  if (stepId === "video") {
+    const step = project.workflow.steps.find((candidate) => candidate.id === "video");
+    const configuredModel = typeof step?.settings.model === "string" ? step.settings.model : null;
+    return { provider: "fal.ai", model: configuredModel ?? configuredVideoModel ?? "모델 미설정" };
   }
   if (stepId === "editing") {
     return { provider: "실행 방식", model: "로컬 처리" };

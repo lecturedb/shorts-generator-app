@@ -55,12 +55,17 @@ test("실제 파일과 누락된 참조를 함께 파일 트리 항목으로 만
       ),
       "unsupported",
     );
+    await writeFile(
+      resolveProjectFilePath(project.project.id, ".DS_Store", storage.options),
+      "finder metadata",
+    );
 
     const files = await listProjectFileEntries(project.project.id, storage.options);
     const projectJson = files.find((file) => file.relativePath === "project.json");
     const image = files.find((file) => file.relativePath === imagePath);
     const missingVideo = files.find((file) => file.relativePath === "videos/clip-missing.mp4");
     const unsupported = files.find((file) => file.relativePath === "script/notes.bin");
+    const finderMetadata = files.find((file) => file.relativePath === ".DS_Store");
 
     assert.equal(projectJson?.status, "available");
     assert.equal(projectJson?.kind, "json");
@@ -70,6 +75,7 @@ test("실제 파일과 누락된 참조를 함께 파일 트리 항목으로 만
     assert.match(missingVideo?.recoveryAction ?? "", /다시 실행|복구/);
     assert.equal(unsupported?.status, "unsupported");
     assert.match(unsupported?.issue ?? "", /지원하지/);
+    assert.equal(finderMetadata, undefined);
   } finally {
     await storage.cleanup();
   }

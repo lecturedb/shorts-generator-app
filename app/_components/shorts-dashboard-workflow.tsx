@@ -10,6 +10,7 @@ export function WorkflowEditor({
   selectedStepId,
   onStepSelect,
   configuredImageModel,
+  configuredVideoModel,
 }: {
   project: ProjectDocument;
   projectId: string;
@@ -17,6 +18,7 @@ export function WorkflowEditor({
   selectedStepId: string | null;
   onStepSelect: (stepId: string) => void;
   configuredImageModel: string | null;
+  configuredVideoModel: string | null;
 }) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
@@ -481,6 +483,7 @@ export function WorkflowEditor({
           <WorkflowCards
             project={project}
             configuredImageModel={configuredImageModel}
+            configuredVideoModel={configuredVideoModel}
             steps={steps}
             positions={positions}
             selectedStepId={selectedStepId}

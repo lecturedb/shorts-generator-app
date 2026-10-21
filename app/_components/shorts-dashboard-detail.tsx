@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 import type { ProjectDocument } from "@/lib/project-schema";
 import type { ScriptGenerationInput } from "@/lib/script-generation-types";
 import type { ImageConfigurationAction } from "@/lib/image-generation-types";
+import type { VideoConfigurationAction } from "@/lib/video-generation-types";
 import { Icon, StatusMark, fileIcon, formatFileSize, statusTextClass, stepIcons, type DashboardFile, type PanelContext, type WorkflowStep } from "./shorts-dashboard-shared";
 import { PreviewVisual } from "./shorts-dashboard-preview";
 
@@ -14,16 +15,20 @@ export function SceneTable({
   onFileSelect,
   editable,
   imageEditable,
+  videoEditable,
   busy,
   onSceneChange,
   onGenerateImages,
   onImageConfiguration,
+  onGenerateVideos,
+  onVideoConfiguration,
 }: {
   project: ProjectDocument;
   files: readonly DashboardFile[];
   onFileSelect: (fileId: string) => void;
   editable: boolean;
   imageEditable: boolean;
+  videoEditable: boolean;
   busy: boolean;
   onSceneChange: (
     sceneId: string,
@@ -31,6 +36,8 @@ export function SceneTable({
   ) => void;
   onGenerateImages: (sceneIds?: string[]) => void;
   onImageConfiguration: (action: ImageConfigurationAction) => void;
+  onGenerateVideos: (sceneIds?: string[]) => void;
+  onVideoConfiguration: (action: VideoConfigurationAction) => void;
 }) {
   const assetLabel = (assetId: string | null) =>
     assetId === null
@@ -70,6 +77,8 @@ export function SceneTable({
             {project.scenes.map((scene) => {
               const imageFile = files.find((file) => file.id === scene.selectedImageAssetId);
               const imageCandidates = project.assets.filter((asset) => asset.sceneId === scene.id && asset.role === "scene-image");
+              const videoCandidates = project.assets.filter((asset) => asset.sceneId === scene.id && asset.role === "scene-video");
+              const videoFile = files.find((file) => file.id === scene.video.selectedAssetId);
               const allImageAssets = project.assets.filter((asset) => asset.role === "scene-image");
               const endScene = project.assets.find((asset) => asset.id === scene.video.endImageAssetId)?.sceneId;
               return (
@@ -112,8 +121,20 @@ export function SceneTable({
                       </>}
                     </div> : scene.video.enabled ? <div className="space-y-1"><span className="inline-flex rounded-full bg-violet-100 px-2 py-1 font-bold text-violet-700">영상 생성</span><p className="font-semibold text-slate-700">{scene.video.mode === "start_end" ? `${scene.order}번 → ${endScene ? Number(endScene.slice(-2)) : "?"}번 이미지` : `${scene.order}번 이미지 한 장`}</p></div> : <span className="text-slate-400">이미지 사용</span>}
                   </td>
-                  <td className="px-2 py-2"><div className="flex items-center gap-1.5"><StatusMark status={scene.video.status} compact /><span className={`font-bold ${statusTextClass(scene.video.status)}`}>{scene.video.status}</span></div></td>
-                  <td className="wrap-break-word px-2 py-2 text-slate-500">{scene.image.error ?? scene.video.error ?? "없음"}</td>
+                  <td className="px-2 py-2">
+                    <div className="flex items-center gap-1.5"><StatusMark status={scene.video.status} compact /><span className={`font-bold ${statusTextClass(scene.video.status)}`}>{scene.video.status}</span></div>
+                    {videoEditable && scene.video.enabled && <div className="mt-2 space-y-1.5">
+                      <select aria-label={`${scene.order}번 장면 대표 영상`} disabled={busy || videoCandidates.length === 0} value={scene.video.selectedAssetId ?? ""} onChange={(event) => onVideoConfiguration({ action: "select-video", sceneId: scene.id, assetId: event.target.value })} className="h-8 w-full rounded-lg border border-slate-200 bg-white px-1 text-[11px] font-semibold disabled:opacity-50">
+                        <option value="">후보 없음</option>
+                        {videoCandidates.map((asset) => <option key={asset.id} value={asset.id}>{asset.label}</option>)}
+                      </select>
+                      <button type="button" disabled={!videoFile} onClick={() => videoFile && onFileSelect(videoFile.id)} className="h-8 w-full rounded-lg border border-slate-200 text-[11px] font-bold text-slate-700 disabled:opacity-50">대표 영상 미리보기</button>
+                    </div>}
+                  </td>
+                  <td className="wrap-break-word px-2 py-2 text-slate-500">
+                    <span>{scene.video.error ?? scene.image.error ?? "없음"}</span>
+                    {videoEditable && scene.video.enabled && <button type="button" disabled={busy || typeof scene.video.input.prompt !== "string" || !scene.video.input.prompt.trim()} onClick={() => onGenerateVideos([scene.id])} className="mt-2 h-8 w-full rounded-lg border border-violet-200 text-[11px] font-bold text-violet-700 disabled:opacity-50">{videoCandidates.length ? "이 장면 재생성" : "이 장면 생성"}</button>}
+                  </td>
                 </tr>
               );
             })}
@@ -138,6 +159,28 @@ export function ImageStepPanel({ project, busy, configuredImageModel, onGenerate
     <button type="button" disabled={busy || project.scenes.length === 0} onClick={() => onGenerateImages()} className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-bold text-white disabled:opacity-50"><Icon name="image" className="h-4 w-4" />{completed ? "모든 장면 후보 추가 생성" : "모든 장면 이미지 생성"}</button>
     <button type="button" disabled={busy || selectedVideos === 0} onClick={onGenerateVideoPrompts} className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-violet-200 bg-white px-4 text-sm font-bold text-violet-700 disabled:opacity-50"><Icon name="sparkles" className="h-4 w-4" />선택 장면 영상 프롬프트 생성</button>
     <p className="rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-800">장면 표에서 후보를 검토하고 대표 이미지를 선택한 뒤, 영상화할 장면과 시작·끝 이미지를 지정하세요. 선택 전에는 영상 정보가 생성되지 않습니다.</p>
+  </div>;
+}
+
+export function VideoStepPanel({ project, selectedFile, busy, configuredVideoModel, onGenerateVideos }: { project: ProjectDocument; selectedFile: DashboardFile | undefined; busy: boolean; configuredVideoModel: string | null; onGenerateVideos: (sceneIds?: string[]) => void }) {
+  const step = project.workflow.steps.find((candidate) => candidate.id === "video");
+  const targets = project.scenes.filter((scene) => scene.video.enabled);
+  const completed = targets.filter((scene) => scene.video.status === "완료").length;
+  const ready = targets.length > 0 && targets.every((scene) => typeof scene.video.input.prompt === "string" && scene.video.input.prompt.trim() && scene.video.startImageAssetId && (scene.video.mode !== "start_end" || scene.video.endImageAssetId));
+  const model = typeof step?.settings.model === "string" ? step.settings.model : (configuredVideoModel ?? "모델 미설정");
+  const previewFile = selectedFile?.kind === "video" ? selectedFile : undefined;
+  return <div className="space-y-4">
+    <div className="rounded-2xl bg-linear-to-br from-violet-600 to-indigo-700 p-4 text-white">
+      <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-bold text-violet-200">fal.ai 영상 생성</p><h3 className="mt-1 text-lg font-black">{step?.status ?? "대기"}</h3></div><StatusMark status={step?.status ?? "대기"} compact /></div>
+      <p className="mt-3 break-all text-xs leading-5 text-violet-100">모델: {model}</p>
+      <p className="mt-1 text-xs leading-5 text-violet-100">오디오 생성: 꺼짐</p>
+    </div>
+    <div className="grid grid-cols-2 gap-2"><div className="rounded-xl bg-slate-50 p-3"><p className="text-[11px] font-bold text-slate-400">영상 대상</p><p className="mt-1 text-lg font-black text-slate-900">{targets.length}개</p></div><div className="rounded-xl bg-slate-50 p-3"><p className="text-[11px] font-bold text-slate-400">완료</p><p className="mt-1 text-lg font-black text-slate-900">{completed}/{targets.length}</p></div></div>
+    <button type="button" disabled={busy || !configuredVideoModel || !ready} onClick={() => onGenerateVideos()} className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-bold text-white disabled:opacity-50"><Icon name="video" className="h-4 w-4" />{completed ? "선택 장면 후보 추가 생성" : "선택 장면 영상 생성"}</button>
+    {!configuredVideoModel && <p className="rounded-xl bg-rose-50 p-3 text-xs font-semibold leading-5 text-rose-700">.env.local에 FAL_VIDEO_MODEL을 설정해 주세요.</p>}
+    {!ready && targets.length > 0 && <p className="rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-800">이미지 단계에서 선택 장면의 시작·끝 이미지와 영상 프롬프트를 먼저 준비해 주세요.</p>}
+    {previewFile && <div><p className="mb-2 text-xs font-bold text-slate-500">선택한 영상 미리보기</p><PreviewVisual key={previewFile.id} file={previewFile} project={project} /></div>}
+    <p className="rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-600">영상 대상으로 선택하지 않은 장면은 최종 편집에서 대표 이미지를 그대로 사용합니다.</p>
   </div>;
 }
 
@@ -209,7 +252,7 @@ export function ScriptStepPanel({
   );
 }
 
-export function DetailPanel({ project, selectedStep, selectedFile, context, busy, configuredImageModel, onProjectChange, onGenerate, onApplyScript, onGenerateImages, onGenerateVideoPrompts }: { project: ProjectDocument; selectedStep: WorkflowStep; selectedFile: DashboardFile | undefined; context: PanelContext; busy: boolean; configuredImageModel: string | null; onProjectChange: (project: ProjectDocument) => void; onGenerate: (input: ScriptGenerationInput) => void; onApplyScript: (narrations: string[]) => void; onGenerateImages: (sceneIds?: string[]) => void; onGenerateVideoPrompts: () => void }) {
+export function DetailPanel({ project, selectedStep, selectedFile, context, busy, configuredImageModel, configuredVideoModel, onProjectChange, onGenerate, onApplyScript, onGenerateImages, onGenerateVideoPrompts, onGenerateVideos }: { project: ProjectDocument; selectedStep: WorkflowStep; selectedFile: DashboardFile | undefined; context: PanelContext; busy: boolean; configuredImageModel: string | null; configuredVideoModel: string | null; onProjectChange: (project: ProjectDocument) => void; onGenerate: (input: ScriptGenerationInput) => void; onApplyScript: (narrations: string[]) => void; onGenerateImages: (sceneIds?: string[]) => void; onGenerateVideoPrompts: () => void; onGenerateVideos: (sceneIds?: string[]) => void }) {
   return (
     <aside aria-labelledby="detail-heading" className="h-full min-w-0 overflow-y-auto rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)] sm:p-5">
       <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-600">{context === "file" ? "File preview" : context === "script" ? "Script" : "Step detail"}</p>
@@ -218,6 +261,8 @@ export function DetailPanel({ project, selectedStep, selectedFile, context, busy
         <ScriptStepPanel project={project} busy={busy} onProjectChange={onProjectChange} onGenerate={onGenerate} onApplyScript={onApplyScript} />
       ) : context === "step" && selectedStep.id === "image" ? (
         <ImageStepPanel project={project} busy={busy} configuredImageModel={configuredImageModel} onGenerateImages={onGenerateImages} onGenerateVideoPrompts={onGenerateVideoPrompts} />
+      ) : context === "step" && selectedStep.id === "video" ? (
+        <VideoStepPanel project={project} selectedFile={selectedFile} busy={busy} configuredVideoModel={configuredVideoModel} onGenerateVideos={onGenerateVideos} />
       ) : context === "script" ? (
         <div className="space-y-3"><div className="rounded-2xl bg-linear-to-br from-violet-600 to-indigo-700 p-5 text-white"><p className="text-xs font-bold text-violet-200">전체 대본 · {project.script.targetDurationSeconds}초</p><h3 className="mt-2 text-xl font-black">{project.script.topic || "주제 미정"}</h3><p className="mt-4 max-h-72 overflow-auto text-sm leading-6 text-violet-50">{project.script.text || "대본이 없습니다."}</p></div><p className="rounded-xl bg-slate-50 p-3 text-xs font-semibold text-slate-600">장면 {project.scenes.length}개 · 이미지 대표 선택 {project.scenes.filter((scene) => scene.selectedImageAssetId).length}개</p></div>
       ) : context === "file" && selectedFile ? (

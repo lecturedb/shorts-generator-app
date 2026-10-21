@@ -125,9 +125,14 @@ export function PreviewVisual({
   const [textContent, setTextContent] = useState<string | null>(null);
   const [textError, setTextError] = useState<string | null>(null);
   const [jsonView, setJsonView] = useState<"readable" | "raw">("readable");
+  const [jsonCopyStatus, setJsonCopyStatus] = useState<
+    "idle" | "copied" | "error"
+  >("idle");
   const [mediaError, setMediaError] = useState<string | null>(null);
   const [imageExpanded, setImageExpanded] = useState(false);
+  const [videoExpanded, setVideoExpanded] = useState(false);
   const [expandedImageIndex, setExpandedImageIndex] = useState(0);
+  const [expandedVideoIndex, setExpandedVideoIndex] = useState(0);
   const contentUrl = `/api/projects/${project.project.id}/files/content?path=${encodeURIComponent(file.relativePath)}`;
   const sceneImages = project.scenes.flatMap((scene) => {
     const asset = project.assets.find(
@@ -143,20 +148,48 @@ export function PreviewVisual({
     path: file.relativePath,
   };
   const expandedImageUrl = `/api/projects/${project.project.id}/files/content?path=${encodeURIComponent(expandedImage.path)}`;
+  const selectedSceneVideos = project.scenes.flatMap((scene) => {
+    const asset = project.assets.find(
+      (candidate) => candidate.id === scene.video.selectedAssetId,
+    );
+    return asset
+      ? [{ order: scene.order, label: asset.label, path: asset.relativePath }]
+      : [];
+  });
+  const sceneVideos = selectedSceneVideos.some(
+    (video) => video.path === file.relativePath,
+  )
+    ? selectedSceneVideos
+    : [
+        { order: null, label: file.label, path: file.relativePath },
+        ...selectedSceneVideos,
+      ];
+  const expandedVideo = sceneVideos[expandedVideoIndex] ?? {
+    order: null,
+    label: file.label,
+    path: file.relativePath,
+  };
+  const expandedVideoUrl = `/api/projects/${project.project.id}/files/content?path=${encodeURIComponent(expandedVideo.path)}`;
 
   useEffect(() => {
-    if (!imageExpanded) return;
+    if (!imageExpanded && !videoExpanded) return;
+    const previousRootOverflow = document.documentElement.style.overflow;
     const previousOverflow = document.body.style.overflow;
     const closeOnEscape = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") setImageExpanded(false);
+      if (event.key === "Escape") {
+        setImageExpanded(false);
+        setVideoExpanded(false);
+      }
     };
+    document.documentElement.style.overflow = "hidden";
     document.body.style.overflow = "hidden";
     window.addEventListener("keydown", closeOnEscape);
     return () => {
+      document.documentElement.style.overflow = previousRootOverflow;
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", closeOnEscape);
     };
-  }, [imageExpanded]);
+  }, [imageExpanded, videoExpanded]);
 
   useEffect(() => {
     if (
@@ -232,7 +265,7 @@ export function PreviewVisual({
         {imageExpanded &&
           createPortal(
             <div
-              className="fixed inset-0 z-100 flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-sm sm:p-8"
+              className="fixed inset-0 z-100 flex items-center justify-center overscroll-none bg-slate-950/85 p-4 backdrop-blur-sm sm:p-8"
               role="dialog"
               aria-modal="true"
               aria-label={`${file.label} 확대 미리보기`}
@@ -324,21 +357,144 @@ export function PreviewVisual({
   }
   if (file.kind === "video") {
     return (
-      <video
-        key={contentUrl}
-        controls
-        preload="metadata"
-        playsInline
-        className="aspect-video w-full rounded-2xl bg-slate-950 object-contain"
-        onError={() =>
-          setMediaError(
-            "영상 파일이 손상되었거나 브라우저가 코덱을 지원하지 않습니다.",
-          )
-        }
-      >
-        <source src={contentUrl} />
-        브라우저에서 영상 재생을 지원하지 않습니다.
-      </video>
+      <>
+        <div className="relative aspect-video overflow-hidden rounded-2xl bg-slate-950">
+          <video
+            key={contentUrl}
+            controls
+            preload="metadata"
+            playsInline
+            className="h-full w-full object-contain"
+            onError={() =>
+              setMediaError(
+                "영상 파일이 손상되었거나 브라우저가 코덱을 지원하지 않습니다.",
+              )
+            }
+          >
+            <source src={contentUrl} />
+            브라우저에서 영상 재생을 지원하지 않습니다.
+          </video>
+          <button
+            type="button"
+            onClick={() => {
+              const selectedIndex = sceneVideos.findIndex(
+                (video) => video.path === file.relativePath,
+              );
+              setExpandedVideoIndex(selectedIndex >= 0 ? selectedIndex : 0);
+              setVideoExpanded(true);
+            }}
+            className="absolute right-2 top-2 z-10 flex h-9 w-9 items-center justify-center rounded-lg bg-slate-950/70 text-white shadow-lg backdrop-blur transition hover:bg-slate-950/90"
+            aria-label={`${file.label} 크게 보기`}
+            title="크게 보기"
+          >
+            <Icon name="expand" className="h-4 w-4" />
+          </button>
+        </div>
+        {videoExpanded &&
+          createPortal(
+            <div
+              className="fixed inset-0 z-100 flex items-center justify-center overscroll-none bg-slate-950/85 p-4 backdrop-blur-sm sm:p-8"
+              role="dialog"
+              aria-modal="true"
+              aria-label={`${file.label} 확대 미리보기`}
+              onClick={() => setVideoExpanded(false)}
+            >
+              <button
+                type="button"
+                onClick={() => setVideoExpanded(false)}
+                className="absolute right-4 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-white transition hover:bg-white/25 sm:right-6 sm:top-6"
+                aria-label="영상 확대 미리보기 닫기"
+              >
+                <Icon name="close" className="h-5 w-5" />
+              </button>
+              <div
+                className="flex h-full min-h-0 w-full max-w-6xl flex-col gap-3"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="relative flex min-h-0 flex-1 items-center justify-center">
+                  <video
+                    key={`expanded-${expandedVideoUrl}`}
+                    controls
+                    autoPlay
+                    preload="auto"
+                    playsInline
+                    className="max-h-full max-w-full rounded-2xl bg-black object-contain shadow-2xl"
+                    onError={() =>
+                      setMediaError(
+                        "영상 파일이 손상되었거나 브라우저가 코덱을 지원하지 않습니다.",
+                      )
+                    }
+                  >
+                    <source src={expandedVideoUrl} />
+                    브라우저에서 영상 재생을 지원하지 않습니다.
+                  </video>
+                  {sceneVideos.length > 1 && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedVideoIndex((current) =>
+                            (current - 1 + sceneVideos.length) %
+                            sceneVideos.length,
+                          )
+                        }
+                        className="absolute left-0 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-slate-950/65 text-white shadow-lg transition hover:bg-slate-950/85"
+                        aria-label="이전 장면 영상"
+                      >
+                        <Icon name="chevron" className="h-5 w-5 rotate-90" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedVideoIndex(
+                            (current) => (current + 1) % sceneVideos.length,
+                          )
+                        }
+                        className="absolute right-0 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-slate-950/65 text-white shadow-lg transition hover:bg-slate-950/85"
+                        aria-label="다음 장면 영상"
+                      >
+                        <Icon name="chevron" className="h-5 w-5 -rotate-90" />
+                      </button>
+                    </>
+                  )}
+                </div>
+                <p className="shrink-0 text-center text-xs font-bold text-white">
+                  {expandedVideo.order === null
+                    ? expandedVideo.label
+                    : `${expandedVideo.order}번 장면 · ${expandedVideo.label}`}
+                </p>
+                <div className="flex shrink-0 justify-center gap-2 overflow-x-auto py-1">
+                  {sceneVideos.map((video, index) => {
+                    const videoUrl = `/api/projects/${project.project.id}/files/content?path=${encodeURIComponent(video.path)}`;
+                    return (
+                      <button
+                        key={video.path}
+                        type="button"
+                        onClick={() => setExpandedVideoIndex(index)}
+                        className={`relative h-20 w-14 shrink-0 overflow-hidden rounded-lg border-2 bg-slate-900 transition ${index === expandedVideoIndex ? "border-violet-400" : "border-white/20 opacity-70 hover:opacity-100"}`}
+                        aria-label={`${video.order ?? video.label} 영상 보기`}
+                        aria-pressed={index === expandedVideoIndex}
+                      >
+                        <video
+                          muted
+                          playsInline
+                          preload="metadata"
+                          className="h-full w-full object-cover"
+                        >
+                          <source src={`${videoUrl}#t=0.1`} />
+                        </video>
+                        <span className="absolute bottom-0 left-0 right-0 bg-slate-950/75 py-0.5 text-[10px] font-bold text-white">
+                          {video.order ?? "현재"}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )}
+      </>
     );
   }
   if (file.kind === "audio") {
@@ -392,6 +548,15 @@ export function PreviewVisual({
       />
     );
   }
+  const formattedJson = JSON.stringify(parsedJson, null, 2);
+  const copyJson = async () => {
+    try {
+      await navigator.clipboard.writeText(formattedJson);
+      setJsonCopyStatus("copied");
+    } catch {
+      setJsonCopyStatus("error");
+    }
+  };
   return (
     <div>
       <div
@@ -418,9 +583,34 @@ export function PreviewVisual({
           isProjectDocument={file.relativePath === "project.json"}
         />
       ) : (
-        <pre className="max-h-96 overflow-auto whitespace-pre-wrap wrap-break-word rounded-2xl bg-slate-950 p-5 text-xs leading-6 text-violet-100">
-          {JSON.stringify(parsedJson, null, 2)}
-        </pre>
+        <div className="group relative">
+          <button
+            type="button"
+            onClick={copyJson}
+            className="absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-lg border border-white/15 bg-slate-800/90 text-slate-200 opacity-0 shadow-sm backdrop-blur transition hover:bg-slate-700 group-hover:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
+            aria-label={
+              jsonCopyStatus === "copied"
+                ? "JSON 복사 완료"
+                : "JSON 파일 복사하기"
+            }
+            title="JSON 파일 복사하기"
+          >
+            <Icon
+              name={jsonCopyStatus === "copied" ? "check" : "copy"}
+              className="h-4 w-4"
+            />
+          </button>
+          <pre className="max-h-96 overflow-auto whitespace-pre rounded-2xl bg-slate-950 p-4 text-[10px] leading-4 text-violet-100">
+            {formattedJson}
+          </pre>
+          <span className="sr-only" aria-live="polite">
+            {jsonCopyStatus === "copied"
+              ? "JSON을 클립보드에 복사했습니다."
+              : jsonCopyStatus === "error"
+                ? "JSON을 복사하지 못했습니다."
+                : ""}
+          </span>
+        </div>
       )}
     </div>
   );

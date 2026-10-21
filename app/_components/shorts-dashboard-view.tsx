@@ -5,6 +5,7 @@ import type { ProjectSummary } from "@/lib/project-management-types";
 import type { ProjectDocument } from "@/lib/project-schema";
 import type { ScriptGenerationInput } from "@/lib/script-generation-types";
 import type { ImageConfigurationAction } from "@/lib/image-generation-types";
+import type { VideoConfigurationAction } from "@/lib/video-generation-types";
 import { Icon, type DashboardFile, type PanelContext } from "./shorts-dashboard-shared";
 import { DetailPanel, SceneTable } from "./shorts-dashboard-detail";
 import { SidebarContent } from "./shorts-dashboard-sidebar";
@@ -30,7 +31,10 @@ export interface DashboardViewProps {
   onGenerateImages: (sceneIds?: string[]) => void;
   onImageConfiguration: (action: ImageConfigurationAction) => void;
   onGenerateVideoPrompts: () => void;
+  onGenerateVideos: (sceneIds?: string[]) => void;
+  onVideoConfiguration: (action: VideoConfigurationAction) => void;
   configuredImageModel: string | null;
+  configuredVideoModel: string | null;
 }
 
 export function DashboardView({
@@ -53,7 +57,10 @@ export function DashboardView({
   onGenerateImages,
   onImageConfiguration,
   onGenerateVideoPrompts,
+  onGenerateVideos,
+  onVideoConfiguration,
   configuredImageModel,
+  configuredVideoModel,
 }: DashboardViewProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -363,6 +370,7 @@ export function DashboardView({
                 projectId={project.project.id}
                 steps={project.workflow.steps}
                 configuredImageModel={configuredImageModel}
+                configuredVideoModel={configuredVideoModel}
                 selectedStepId={
                   panelContext === "step" ? selectedStep.id : null
                 }
@@ -392,6 +400,8 @@ export function DashboardView({
                 onApplyScript={applyWholeScript}
                 onGenerateImages={onGenerateImages}
                 onGenerateVideoPrompts={onGenerateVideoPrompts}
+                onGenerateVideos={onGenerateVideos}
+                configuredVideoModel={configuredVideoModel}
                 configuredImageModel={configuredImageModel}
               />
             </div>
@@ -403,10 +413,13 @@ export function DashboardView({
               onFileSelect={selectFile}
               editable={panelContext === "step" && selectedStep.id === "script"}
               imageEditable={panelContext === "step" && selectedStep.id === "image"}
+              videoEditable={panelContext === "step" && selectedStep.id === "video"}
               busy={busy}
               onSceneChange={updateScene}
               onGenerateImages={onGenerateImages}
               onImageConfiguration={onImageConfiguration}
+              onGenerateVideos={onGenerateVideos}
+              onVideoConfiguration={onVideoConfiguration}
             />
 
           </main>
