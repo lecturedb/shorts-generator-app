@@ -8,6 +8,7 @@ import type { ScriptGenerationInput, ScriptGenerationRunResult } from "@/lib/scr
 import type { ImageConfigurationAction, ImageGenerationRunResult } from "@/lib/image-generation-types";
 import type { VideoConfigurationAction, VideoGenerationRunResult } from "@/lib/video-generation-types";
 import type { VoiceConfigurationAction, VoiceGenerationInput, VoiceGenerationRunResult } from "@/lib/voice-generation-types";
+import type { MusicConfigurationAction, MusicGenerationInput, MusicGenerationRunResult } from "@/lib/music-generation-types";
 import { DashboardView } from "./shorts-dashboard-view";
 import { Icon } from "./shorts-dashboard-shared";
 
@@ -76,7 +77,7 @@ function EmptyWorkspace({
     </main>
   );
 }
-export function ShortsDashboard({ configuredImageModel, configuredVideoModel, configuredVoiceModel }: { configuredImageModel: string | null; configuredVideoModel: string | null; configuredVoiceModel: string | null }) {
+export function ShortsDashboard({ configuredImageModel, configuredVideoModel, configuredVoiceModel, configuredMusicModel }: { configuredImageModel: string | null; configuredVideoModel: string | null; configuredVoiceModel: string | null; configuredMusicModel: string | null }) {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [project, setProject] = useState<ProjectDocument | null>(null);
   const [files, setFiles] = useState<ProjectFileEntry[]>([]);
@@ -471,6 +472,59 @@ export function ShortsDashboard({ configuredImageModel, configuredVideoModel, co
     }
   };
 
+  const generateMusic = async (input: MusicGenerationInput) => {
+    if (!project) return;
+    setBusy(true);
+    setError(null);
+    setNotice(`${project.project.settings.targetDurationSeconds}초 배경음악을 fal.ai에 요청했습니다.`);
+    try {
+      const started = await requestJson<MusicGenerationRunResult>(`/api/projects/${project.project.id}/music-runs`, {
+        method: "POST",
+        body: JSON.stringify({ requestId: crypto.randomUUID(), input }),
+      });
+      setProject(started.project);
+      let latest = started;
+      for (let attempt = 0; attempt < 600 && latest.status === "실행 중"; attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 1_000));
+        const status = await requestJson<MusicGenerationRunResult & { projects: ProjectSummary[] }>(
+          `/api/projects/${project.project.id}/music-runs/${started.runId}`,
+        );
+        latest = status;
+        setProject(status.project);
+        setProjects(status.projects);
+      }
+      await refreshFiles(project.project.id);
+      const run = latest.project.runs.find((candidate) => candidate.id === latest.runId);
+      if (latest.status === "완료") setNotice(run?.message ?? "배경음악을 생성해 프로젝트에 저장했습니다.");
+      else if (latest.status === "실패" || latest.status === "확인 필요") throw new Error(run?.errorSummary ?? run?.message ?? "배경음악 생성 결과를 확인해 주세요.");
+      else setNotice("배경음악 생성은 서버에서 계속 진행 중입니다. 프로젝트를 다시 열어 상태를 확인할 수 있습니다.");
+    } catch (caught) {
+      showError(caught);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const updateMusicConfiguration = async (action: MusicConfigurationAction) => {
+    if (!project) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await requestJson<ProjectMutationResult>(`/api/projects/${project.project.id}/music-configuration`, {
+        method: "PATCH",
+        body: JSON.stringify(action),
+      });
+      setProject(result.project);
+      setProjects(result.projects);
+      await refreshFiles(project.project.id);
+      setNotice(action.action === "select-music" ? "대표 배경음악 후보를 저장했습니다." : "배경음악 설정을 저장했습니다.");
+    } catch (caught) {
+      showError(caught);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const deleteCurrentProject = async () => {
     if (!project) return;
     const confirmed = window.confirm(
@@ -551,9 +605,12 @@ export function ShortsDashboard({ configuredImageModel, configuredVideoModel, co
       onVideoConfiguration={(action) => void updateVideoConfiguration(action)}
       onGenerateVoice={(input) => void generateVoice(input)}
       onVoiceConfiguration={(action) => void updateVoiceConfiguration(action)}
+      onGenerateMusic={(input) => void generateMusic(input)}
+      onMusicConfiguration={(action) => void updateMusicConfiguration(action)}
       configuredImageModel={configuredImageModel}
       configuredVideoModel={configuredVideoModel}
       configuredVoiceModel={configuredVoiceModel}
+      configuredMusicModel={configuredMusicModel}
     />
   );
 }

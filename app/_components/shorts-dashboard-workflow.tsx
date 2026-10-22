@@ -12,6 +12,7 @@ export function WorkflowEditor({
   configuredImageModel,
   configuredVideoModel,
   configuredVoiceModel,
+  configuredMusicModel,
 }: {
   project: ProjectDocument;
   projectId: string;
@@ -21,6 +22,7 @@ export function WorkflowEditor({
   configuredImageModel: string | null;
   configuredVideoModel: string | null;
   configuredVoiceModel: string | null;
+  configuredMusicModel: string | null;
 }) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
@@ -487,6 +489,7 @@ export function WorkflowEditor({
             configuredImageModel={configuredImageModel}
             configuredVideoModel={configuredVideoModel}
             configuredVoiceModel={configuredVoiceModel}
+            configuredMusicModel={configuredMusicModel}
             steps={steps}
             positions={positions}
             selectedStepId={selectedStepId}

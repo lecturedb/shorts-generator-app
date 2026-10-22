@@ -293,7 +293,7 @@ export function providerModelLabel(provider: string | null, model: string | null
   return { provider: providerLabel ?? "제공사업자 미상", model };
 }
 
-export function workflowModelLabel(project: ProjectDocument, stepId: string, configuredImageModel: string | null = null, configuredVideoModel: string | null = null, configuredVoiceModel: string | null = null) {
+export function workflowModelLabel(project: ProjectDocument, stepId: string, configuredImageModel: string | null = null, configuredVideoModel: string | null = null, configuredVoiceModel: string | null = null, configuredMusicModel: string | null = null) {
   if (stepId === "script") {
     return providerModelLabel(project.script.provider, project.script.model);
   }
@@ -301,7 +301,7 @@ export function workflowModelLabel(project: ProjectDocument, stepId: string, con
     return providerModelLabel(project.voice.provider ?? (configuredVoiceModel ? "fal.ai" : null), project.voice.model ?? configuredVoiceModel);
   }
   if (stepId === "music") {
-    return providerModelLabel(project.music.provider, project.music.model);
+    return providerModelLabel(project.music.provider ?? (configuredMusicModel ? "fal.ai" : null), project.music.model ?? configuredMusicModel);
   }
   if (stepId === "image") {
     const step = project.workflow.steps.find((candidate) => candidate.id === "image");

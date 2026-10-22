@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { readdir, rm } from "node:fs/promises";
 
-import type { ProjectDocument } from "../project-schema.ts";
+import { markMusicStaleForDurationChange } from "../music-generation-project.ts";
+import { parseProjectDocument, type ProjectDocument } from "../project-schema.ts";
 import type { ProjectDeletionResult, ProjectListResult, ProjectSummary } from "../project-management-types.ts";
 import {
   ProjectStorageError,
@@ -120,7 +121,9 @@ export async function saveManagedProject(projectId: string, input: unknown, opti
     throw new ProjectStorageError("WRITE_FAILED", "다른 프로젝트 ID로 저장할 수 없습니다.");
   }
   projectRecord.updatedAt = new Date().toISOString();
-  return saveProjectDocument(candidate, options);
+  const parsed = parseProjectDocument(candidate);
+  markMusicStaleForDurationChange(parsed, current.project.settings.targetDurationSeconds);
+  return saveProjectDocument(parsed, options);
 }
 
 export async function deleteProject(projectId: string, confirmation: unknown, options: ProjectStorageOptions = {}): Promise<ProjectDeletionResult> {

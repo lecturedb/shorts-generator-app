@@ -7,6 +7,9 @@ import type { ScriptGenerationInput } from "@/lib/script-generation-types";
 import type { ImageConfigurationAction } from "@/lib/image-generation-types";
 import type { VideoConfigurationAction } from "@/lib/video-generation-types";
 import type { VoiceConfigurationAction, VoiceGenerationInput } from "@/lib/voice-generation-types";
+import { editingMusicInput, markMusicStaleForDurationChange } from "@/lib/music-generation-project";
+import type { MusicConfigurationAction, MusicGenerationInput } from "@/lib/music-generation-types";
+import { musicModelFamily, musicModelMaximumDuration } from "@/lib/music-generation-validation";
 import { Icon, StatusMark, fileIcon, formatFileSize, statusTextClass, stepIcons, type DashboardFile, type PanelContext, type WorkflowStep } from "./shorts-dashboard-shared";
 import { PreviewVisual } from "./shorts-dashboard-preview";
 
@@ -254,6 +257,67 @@ export function VoiceStepPanel({ project, busy, configuredVoiceModel, onGenerate
   </div>;
 }
 
+function musicSetting(project: ProjectDocument, key: string, fallback: string | number | boolean) {
+  const value = project.music.input[key];
+  return typeof value === typeof fallback ? value : fallback;
+}
+
+export function MusicStepPanel({ project, busy, configuredMusicModel, onGenerateMusic, onMusicConfiguration }: { project: ProjectDocument; busy: boolean; configuredMusicModel: string | null; onGenerateMusic: (input: MusicGenerationInput) => void; onMusicConfiguration: (action: MusicConfigurationAction) => void }) {
+  const step = project.workflow.steps.find((candidate) => candidate.id === "music");
+  const model = project.music.model ?? configuredMusicModel;
+  const family = model ? musicModelFamily(model) : "generic";
+  const [settings, setSettings] = useState<MusicGenerationInput>(() => ({
+    durationSeconds: project.project.settings.targetDurationSeconds,
+    mood: musicSetting(project, "mood", "따뜻하고 희망적인 분위기") as string,
+    prompt: musicSetting(project, "prompt", "Modern cinematic background music with a clear pulse and gentle build") as string,
+    negativePrompt: musicSetting(project, "negative_prompt", "vocals, speech, harsh distortion") as string,
+    instrumental: musicSetting(project, "instrumental", true) as boolean,
+    promptExpansion: musicSetting(project, "prompt_expansion", true) as boolean,
+    inferenceSteps: musicSetting(project, "inference_steps", 8) as number,
+    guidanceScale: musicSetting(project, "guidance_scale", 1) as number,
+    bitrate: musicSetting(project, "bitrate", "192k") as MusicGenerationInput["bitrate"],
+  }));
+  const candidates = project.music.assetIds.flatMap((assetId) => {
+    const asset = project.assets.find((candidate) => candidate.id === assetId && candidate.role === "background-music");
+    return asset ? [asset] : [];
+  });
+  const selected = candidates.find((asset) => asset.id === project.music.selectedAssetId);
+  const update = <Key extends keyof MusicGenerationInput>(key: Key, value: MusicGenerationInput[Key]) => setSettings((current) => ({ ...current, [key]: value }));
+  const durationValid = Number.isInteger(settings.durationSeconds) && settings.durationSeconds >= 10 && settings.durationSeconds <= 180;
+  const durationSupported = model ? durationValid && settings.durationSeconds <= musicModelMaximumDuration(model) : false;
+  return <div className="space-y-4">
+    <div className="rounded-2xl bg-linear-to-br from-violet-600 to-indigo-700 p-4 text-white">
+      <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-bold text-violet-200">fal.ai 배경음악</p><h3 className="mt-1 text-lg font-black">{step?.status ?? "대기"}</h3></div><StatusMark status={step?.status ?? "대기"} compact /></div>
+      <p className="mt-3 break-all text-xs leading-5 text-violet-100">모델: {model ?? "모델 미설정"}</p>
+      <p className="mt-1 text-xs leading-5 text-violet-100">목표 길이: 저장 시 project.json과 동기화</p>
+    </div>
+    <div className="space-y-3">
+      <label className="block text-xs font-bold text-slate-700">길이(초)<input type="number" min={10} max={180} step={1} value={settings.durationSeconds} onChange={(event) => update("durationSeconds", Number(event.target.value))} className="mt-1 h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal" /><span className="mt-1 block text-[11px] font-normal leading-4 text-slate-500">10~180초 · 저장하면 프로젝트 목표 길이와 최종 편집 입력에도 반영됩니다.</span></label>
+      <label className="block text-xs font-bold text-slate-700">분위기<input value={settings.mood} maxLength={200} onChange={(event) => update("mood", event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal" placeholder="예: 따뜻하고 희망적, 빠르고 긴장감 있음" /></label>
+      <label className="block text-xs font-bold text-slate-700">음악 프롬프트<textarea value={settings.prompt} maxLength={4000} onChange={(event) => update("prompt", event.target.value)} className="mt-1 min-h-24 w-full resize-y rounded-xl border border-slate-200 p-3 text-sm font-normal leading-5" /></label>
+      {family === "stable-audio-3" && <label className="block text-xs font-bold text-slate-700">제외할 요소<textarea value={settings.negativePrompt} maxLength={2000} onChange={(event) => update("negativePrompt", event.target.value)} className="mt-1 min-h-16 w-full resize-y rounded-xl border border-slate-200 p-3 text-sm font-normal" /></label>}
+      <label className="flex items-center gap-2 text-xs font-bold text-slate-700"><input type="checkbox" checked={settings.instrumental} onChange={(event) => update("instrumental", event.target.checked)} />보컬 없는 연주곡</label>
+      {(family === "stable-audio-3" || family === "stable-audio-25") && <>
+        {family === "stable-audio-3" && <label className="flex items-center gap-2 text-xs font-bold text-slate-700"><input type="checkbox" checked={settings.promptExpansion} onChange={(event) => update("promptExpansion", event.target.checked)} />모델의 프롬프트 확장 사용</label>}
+        <div className="grid grid-cols-2 gap-3"><label className="text-xs font-bold text-slate-700">추론 단계<input type="number" min={1} max={100} step={1} value={settings.inferenceSteps} onChange={(event) => update("inferenceSteps", Number(event.target.value))} className="mt-1 h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal" /></label><label className="text-xs font-bold text-slate-700">프롬프트 반영 강도<input type="number" min={0} max={20} step={0.1} value={settings.guidanceScale} onChange={(event) => update("guidanceScale", Number(event.target.value))} className="mt-1 h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal" /></label></div>
+        {family === "stable-audio-3" && <label className="block text-xs font-bold text-slate-700">MP3 비트레이트<select value={settings.bitrate} onChange={(event) => update("bitrate", event.target.value as MusicGenerationInput["bitrate"])} className="mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-normal"><option value="128k">128 kbps</option><option value="192k">192 kbps</option><option value="320k">320 kbps</option></select></label>}
+      </>}
+    </div>
+    <div className="grid grid-cols-2 gap-2"><button type="button" disabled={busy || !durationValid || !settings.mood.trim() || !settings.prompt.trim()} onClick={() => onMusicConfiguration({ action: "update-settings", input: settings })} className="h-11 rounded-xl border border-violet-200 bg-white px-3 text-xs font-bold text-violet-700 disabled:opacity-50">설정 저장</button><button type="button" disabled={busy || !model || !durationSupported || !settings.mood.trim() || !settings.prompt.trim()} onClick={() => onGenerateMusic(settings)} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-violet-600 px-3 text-xs font-bold text-white disabled:opacity-50"><Icon name="music" className="h-4 w-4" />{candidates.length ? "전체 재생성" : "음악 생성"}</button></div>
+    {!durationValid && <p className="rounded-xl bg-amber-50 p-3 text-xs font-semibold leading-5 text-amber-800">음악 길이는 10~180초 사이의 정수로 입력해 주세요.</p>}
+    {!model && <p className="rounded-xl bg-rose-50 p-3 text-xs font-semibold leading-5 text-rose-700">.env.local에 FAL_MUSIC_MODEL을 설정해 주세요.</p>}
+    {model && durationValid && !durationSupported && <p className="rounded-xl bg-amber-50 p-3 text-xs font-semibold leading-5 text-amber-800">현재 모델은 최대 {musicModelMaximumDuration(model)}초를 지원합니다. 음악 길이를 조정하거나 다른 모델을 설정해 주세요.</p>}
+    {project.music.error && <p className="rounded-xl bg-rose-50 p-3 text-xs font-semibold leading-5 text-rose-700">{project.music.error}</p>}
+    {candidates.length > 0 && <div className="space-y-2 rounded-xl bg-slate-50 p-3"><label className="block text-xs font-bold text-slate-600">대표 음악<select disabled={busy} value={project.music.selectedAssetId ?? ""} onChange={(event) => onMusicConfiguration({ action: "select-music", assetId: event.target.value })} className="mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold">{candidates.map((asset) => <option key={asset.id} value={asset.id}>{asset.label}{asset.stale.isStale ? " · 확인 필요" : ""}</option>)}</select></label>{selected && <><audio key={selected.id} controls preload="metadata" className="w-full"><source src={`/api/projects/${project.project.id}/files/content?path=${encodeURIComponent(selected.relativePath)}`} />브라우저에서 오디오 재생을 지원하지 않습니다.</audio><p className="text-[11px] font-semibold text-slate-500">{selected.metadata.durationSeconds ? `${selected.metadata.durationSeconds}초 · ` : ""}MP3 · {selected.stale.isStale ? "확인 필요" : "최종 편집 입력 사용 가능"}</p></>}</div>}
+    <p className="rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-600">재생성해도 기존 음악 파일과 다른 단계 결과는 삭제하지 않습니다. 확인 가능한 사용량·비용 정보가 없으면 별도 수치를 표시하지 않습니다.</p>
+  </div>;
+}
+
+export function EditingInputPanel({ project }: { project: ProjectDocument }) {
+  const music = editingMusicInput(project);
+  return <div className="space-y-4"><div className="rounded-2xl bg-linear-to-br from-slate-800 to-slate-950 p-4 text-white"><p className="text-xs font-bold text-slate-300">최종 편집 입력</p><h3 className="mt-1 text-lg font-black">{project.editing.status}</h3></div><div className="space-y-2 rounded-xl bg-slate-50 p-3 text-xs"><p><span className="font-bold text-slate-500">목표 길이</span><span className="float-right font-black text-slate-900">{music.targetDurationSeconds}초</span></p><p className="clear-both"><span className="font-bold text-slate-500">배경음악</span><span className={`float-right max-w-44 truncate font-black ${music.needsReview ? "text-amber-700" : "text-slate-900"}`}>{music.label ?? "선택되지 않음"}{music.needsReview ? " · 확인 필요" : ""}</span></p>{music.relativePath && <p className="clear-both break-all pt-2 text-[11px] text-slate-500">{music.relativePath}</p>}</div><p className="rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-800">MP4 합성 실행은 13단계 범위입니다. 이 단계에서는 선택한 음악과 목표 길이를 입력으로 연결해 표시합니다.</p></div>;
+}
+
 export function ScriptStepPanel({
   project,
   busy,
@@ -277,6 +341,7 @@ export function ScriptStepPanel({
 
   const updateSettings = (change: Partial<ScriptGenerationInput>) => {
     const next = structuredClone(project);
+    const previousDuration = next.project.settings.targetDurationSeconds;
     const nextStep = next.workflow.steps.find((step) => step.id === "script");
     if (!nextStep) return;
     if (change.topic !== undefined) next.script.topic = change.topic;
@@ -289,6 +354,7 @@ export function ScriptStepPanel({
       ...(change.sceneCount === undefined ? {} : { sceneCount: change.sceneCount }),
       ...(change.tone === undefined ? {} : { tone: change.tone }),
     };
+    markMusicStaleForDurationChange(next, previousDuration);
     onProjectChange(next);
   };
 
@@ -322,7 +388,7 @@ export function ScriptStepPanel({
   );
 }
 
-export function DetailPanel({ project, selectedStep, selectedFile, context, busy, configuredImageModel, configuredVideoModel, configuredVoiceModel, onProjectChange, onGenerate, onApplyScript, onGenerateImages, onGenerateVideoPrompts, onGenerateVideos, onGenerateVoice, onVoiceConfiguration }: { project: ProjectDocument; selectedStep: WorkflowStep; selectedFile: DashboardFile | undefined; context: PanelContext; busy: boolean; configuredImageModel: string | null; configuredVideoModel: string | null; configuredVoiceModel: string | null; onProjectChange: (project: ProjectDocument) => void; onGenerate: (input: ScriptGenerationInput) => void; onApplyScript: (narrations: string[]) => void; onGenerateImages: (sceneIds?: string[]) => void; onGenerateVideoPrompts: () => void; onGenerateVideos: (sceneIds?: string[]) => void; onGenerateVoice: (input: VoiceGenerationInput) => void; onVoiceConfiguration: (action: VoiceConfigurationAction) => void }) {
+export function DetailPanel({ project, selectedStep, selectedFile, context, busy, configuredImageModel, configuredVideoModel, configuredVoiceModel, configuredMusicModel, onProjectChange, onGenerate, onApplyScript, onGenerateImages, onGenerateVideoPrompts, onGenerateVideos, onGenerateVoice, onVoiceConfiguration, onGenerateMusic, onMusicConfiguration }: { project: ProjectDocument; selectedStep: WorkflowStep; selectedFile: DashboardFile | undefined; context: PanelContext; busy: boolean; configuredImageModel: string | null; configuredVideoModel: string | null; configuredVoiceModel: string | null; configuredMusicModel: string | null; onProjectChange: (project: ProjectDocument) => void; onGenerate: (input: ScriptGenerationInput) => void; onApplyScript: (narrations: string[]) => void; onGenerateImages: (sceneIds?: string[]) => void; onGenerateVideoPrompts: () => void; onGenerateVideos: (sceneIds?: string[]) => void; onGenerateVoice: (input: VoiceGenerationInput) => void; onVoiceConfiguration: (action: VoiceConfigurationAction) => void; onGenerateMusic: (input: MusicGenerationInput) => void; onMusicConfiguration: (action: MusicConfigurationAction) => void }) {
   return (
     <aside aria-labelledby="detail-heading" className="h-full min-w-0 overflow-y-auto rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)] sm:p-5">
       <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-600">{context === "file" ? "File preview" : context === "script" ? "Script" : "Step detail"}</p>
@@ -335,6 +401,10 @@ export function DetailPanel({ project, selectedStep, selectedFile, context, busy
         <VideoStepPanel project={project} selectedFile={selectedFile} busy={busy} configuredVideoModel={configuredVideoModel} onGenerateVideos={onGenerateVideos} />
       ) : context === "step" && selectedStep.id === "voice" ? (
         <VoiceStepPanel project={project} busy={busy} configuredVoiceModel={configuredVoiceModel} onGenerateVoice={onGenerateVoice} onVoiceConfiguration={onVoiceConfiguration} />
+      ) : context === "step" && selectedStep.id === "music" ? (
+        <MusicStepPanel project={project} busy={busy} configuredMusicModel={configuredMusicModel} onGenerateMusic={onGenerateMusic} onMusicConfiguration={onMusicConfiguration} />
+      ) : context === "step" && selectedStep.id === "editing" ? (
+        <EditingInputPanel project={project} />
       ) : context === "script" ? (
         <div className="space-y-3"><div className="rounded-2xl bg-linear-to-br from-violet-600 to-indigo-700 p-5 text-white"><p className="text-xs font-bold text-violet-200">전체 대본 · {project.script.targetDurationSeconds}초</p><h3 className="mt-2 text-xl font-black">{project.script.topic || "주제 미정"}</h3><p className="mt-4 max-h-72 overflow-auto text-sm leading-6 text-violet-50">{project.script.text || "대본이 없습니다."}</p></div><p className="rounded-xl bg-slate-50 p-3 text-xs font-semibold text-slate-600">장면 {project.scenes.length}개 · 이미지 대표 선택 {project.scenes.filter((scene) => scene.selectedImageAssetId).length}개</p></div>
       ) : context === "file" && selectedFile ? (

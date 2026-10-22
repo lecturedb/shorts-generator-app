@@ -8,5 +8,6 @@ export default async function Home() {
   const configuredImageModel = process.env.FAL_IMAGE_MODEL?.trim() || null;
   const configuredVideoModel = process.env.FAL_VIDEO_MODEL?.trim() || null;
   const configuredVoiceModel = process.env.FAL_VOICE_MODEL?.trim() || null;
-  return <ShortsDashboard configuredImageModel={configuredImageModel} configuredVideoModel={configuredVideoModel} configuredVoiceModel={configuredVoiceModel} />;
+  const configuredMusicModel = process.env.FAL_MUSIC_MODEL?.trim() || null;
+  return <ShortsDashboard configuredImageModel={configuredImageModel} configuredVideoModel={configuredVideoModel} configuredVoiceModel={configuredVoiceModel} configuredMusicModel={configuredMusicModel} />;
 }

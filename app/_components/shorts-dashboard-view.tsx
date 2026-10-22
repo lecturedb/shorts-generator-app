@@ -7,6 +7,7 @@ import type { ScriptGenerationInput } from "@/lib/script-generation-types";
 import type { ImageConfigurationAction } from "@/lib/image-generation-types";
 import type { VideoConfigurationAction } from "@/lib/video-generation-types";
 import type { VoiceConfigurationAction, VoiceGenerationInput } from "@/lib/voice-generation-types";
+import type { MusicConfigurationAction, MusicGenerationInput } from "@/lib/music-generation-types";
 import { Icon, type DashboardFile, type PanelContext } from "./shorts-dashboard-shared";
 import { DetailPanel, SceneTable } from "./shorts-dashboard-detail";
 import { SidebarContent } from "./shorts-dashboard-sidebar";
@@ -36,9 +37,12 @@ export interface DashboardViewProps {
   onVideoConfiguration: (action: VideoConfigurationAction) => void;
   onGenerateVoice: (input: VoiceGenerationInput) => void;
   onVoiceConfiguration: (action: VoiceConfigurationAction) => void;
+  onGenerateMusic: (input: MusicGenerationInput) => void;
+  onMusicConfiguration: (action: MusicConfigurationAction) => void;
   configuredImageModel: string | null;
   configuredVideoModel: string | null;
   configuredVoiceModel: string | null;
+  configuredMusicModel: string | null;
 }
 
 export function DashboardView({
@@ -65,9 +69,12 @@ export function DashboardView({
   onVideoConfiguration,
   onGenerateVoice,
   onVoiceConfiguration,
+  onGenerateMusic,
+  onMusicConfiguration,
   configuredImageModel,
   configuredVideoModel,
   configuredVoiceModel,
+  configuredMusicModel,
 }: DashboardViewProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -379,6 +386,7 @@ export function DashboardView({
                 configuredImageModel={configuredImageModel}
                 configuredVideoModel={configuredVideoModel}
                 configuredVoiceModel={configuredVoiceModel}
+                configuredMusicModel={configuredMusicModel}
                 selectedStepId={
                   panelContext === "step" ? selectedStep.id : null
                 }
@@ -411,9 +419,12 @@ export function DashboardView({
                 onGenerateVideos={onGenerateVideos}
                 onGenerateVoice={onGenerateVoice}
                 onVoiceConfiguration={onVoiceConfiguration}
+                onGenerateMusic={onGenerateMusic}
+                onMusicConfiguration={onMusicConfiguration}
                 configuredVideoModel={configuredVideoModel}
                 configuredImageModel={configuredImageModel}
                 configuredVoiceModel={configuredVoiceModel}
+                configuredMusicModel={configuredMusicModel}
               />
             </div>
             </div>
