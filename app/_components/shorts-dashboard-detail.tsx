@@ -6,6 +6,7 @@ import type { ProjectDocument } from "@/lib/project-schema";
 import type { ScriptGenerationInput } from "@/lib/script-generation-types";
 import type { ImageConfigurationAction } from "@/lib/image-generation-types";
 import type { VideoConfigurationAction } from "@/lib/video-generation-types";
+import type { VoiceConfigurationAction, VoiceGenerationInput } from "@/lib/voice-generation-types";
 import { Icon, StatusMark, fileIcon, formatFileSize, statusTextClass, stepIcons, type DashboardFile, type PanelContext, type WorkflowStep } from "./shorts-dashboard-shared";
 import { PreviewVisual } from "./shorts-dashboard-preview";
 
@@ -184,6 +185,75 @@ export function VideoStepPanel({ project, selectedFile, busy, configuredVideoMod
   </div>;
 }
 
+const koreanVoiceOptions = [
+  { value: "PDoCXqBQFGsvfO0hNkEs", label: "Chris · 남성 · 따뜻하고 명료한 음성" },
+  { value: "uyVNoMrnUku1dZyVEXwD", label: "Anna Kim · 여성 · 젊고 정돈된 내레이션" },
+  { value: "z6Kj0hecH20CdetSElRT", label: "Jennie · 여성 · 밝고 전문적인 내레이션" },
+  { value: "8MwPLtBplylvbrksiBOC", label: "Chungman · 여성 · 차분하고 부드러운 음성" },
+  { value: "s07IwTCOrCDCaETjUVjx", label: "Hyun Bin · 남성 · 차분한 기업·PR 내레이션" },
+  { value: "4JJwo477JUAx3HV0T7n7", label: "Yohan Koo · 남성 · 자신감 있는 대화체" },
+  { value: "1W00IGEmNmwmsDeYy7ag", label: "KKC · 남성 · 밝고 경쾌한 음성" },
+];
+const internationalVoiceNames = ["Rachel", "Aria", "Roger", "Sarah", "Laura", "Charlie", "George", "Callum", "River", "Liam", "Charlotte", "Alice", "Matilda", "Will", "Jessica", "Eric", "Chris", "Brian", "Daniel", "Lily", "Bill"];
+const listedVoiceValues = new Set([...koreanVoiceOptions.map((voice) => voice.value), ...internationalVoiceNames]);
+
+function voiceSetting(project: ProjectDocument, key: string, fallback: string | number | boolean) {
+  const value = project.voice.input[key];
+  return typeof value === typeof fallback ? value : fallback;
+}
+
+export function VoiceStepPanel({ project, busy, configuredVoiceModel, onGenerateVoice, onVoiceConfiguration }: { project: ProjectDocument; busy: boolean; configuredVoiceModel: string | null; onGenerateVoice: (input: VoiceGenerationInput) => void; onVoiceConfiguration: (action: VoiceConfigurationAction) => void }) {
+  const step = project.workflow.steps.find((candidate) => candidate.id === "voice");
+  const [settings, setSettings] = useState<VoiceGenerationInput>(() => ({
+    voice: voiceSetting(project, "voice", koreanVoiceOptions[0].value) as string,
+    languageCode: voiceSetting(project, "language_code", "ko") as string,
+    speed: voiceSetting(project, "speed", 1) as number,
+    stability: voiceSetting(project, "stability", 0.5) as number,
+    similarityBoost: voiceSetting(project, "similarity_boost", 0.75) as number,
+    style: voiceSetting(project, "style", 0) as number,
+    textNormalization: voiceSetting(project, "apply_text_normalization", "auto") as VoiceGenerationInput["textNormalization"],
+    timestamps: voiceSetting(project, "timestamps", true) as boolean,
+  }));
+  const candidates = project.voice.assetIds.flatMap((assetId) => {
+    const asset = project.assets.find((candidate) => candidate.id === assetId && candidate.role === "narration");
+    return asset ? [asset] : [];
+  });
+  const selected = candidates.find((asset) => asset.id === project.voice.selectedAssetId);
+  const selectedTimestamps = project.voice.timestamps.find((entry) => entry.assetId === selected?.id)?.items.length ?? 0;
+  const usesListedVoice = listedVoiceValues.has(settings.voice);
+  const update = <Key extends keyof VoiceGenerationInput>(key: Key, value: VoiceGenerationInput[Key]) => setSettings((current) => ({ ...current, [key]: value }));
+  return <div className="space-y-4">
+    <div className="rounded-2xl bg-linear-to-br from-violet-600 to-indigo-700 p-4 text-white">
+      <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-bold text-violet-200">fal.ai 전체 더빙</p><h3 className="mt-1 text-lg font-black">{step?.status ?? "대기"}</h3></div><StatusMark status={step?.status ?? "대기"} compact /></div>
+      <p className="mt-3 break-all text-xs leading-5 text-violet-100">모델: {project.voice.model ?? configuredVoiceModel ?? "모델 미설정"}</p>
+      <p className="mt-1 text-xs leading-5 text-violet-100">입력: project.json의 전체 대본 1개</p>
+    </div>
+    <div className="space-y-3">
+      <label className="block text-xs font-bold text-slate-700">목소리<select value={usesListedVoice ? settings.voice : "custom"} onChange={(event) => update("voice", event.target.value === "custom" ? "" : event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-normal"><optgroup label="한국어 원어민 음성">{koreanVoiceOptions.map((voice) => <option key={voice.value} value={voice.value}>{voice.label}</option>)}</optgroup><optgroup label="기본 예시 · 영어 기반">{internationalVoiceNames.map((voice) => <option key={voice} value={voice}>{voice}</option>)}</optgroup><option value="custom">직접 입력…</option></select></label>
+      {!usesListedVoice && <label className="block text-xs font-bold text-slate-700">사용자 음성 이름 또는 ID<input value={settings.voice} maxLength={200} onChange={(event) => update("voice", event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal" placeholder="fal.ai 모델이 지원하는 음성 이름 또는 ID" /></label>}
+      <div className="grid grid-cols-2 gap-3">
+        <label className="text-xs font-bold text-slate-700">언어<select value={settings.languageCode} onChange={(event) => update("languageCode", event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-normal"><option value="ko">한국어 (ko)</option><option value="en">영어 (en)</option><option value="ja">일본어 (ja)</option><option value="zh">중국어 (zh)</option><option value="es">스페인어 (es)</option><option value="fr">프랑스어 (fr)</option><option value="de">독일어 (de)</option></select></label>
+        <label className="text-xs font-bold text-slate-700">속도 · {settings.speed.toFixed(2)}<input type="range" min={0.7} max={1.2} step={0.05} value={settings.speed} onChange={(event) => update("speed", Number(event.target.value))} className="mt-2 w-full accent-violet-600" /></label>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <label className="text-xs font-bold text-slate-700">안정성 · {settings.stability.toFixed(2)}<input type="range" min={0} max={1} step={0.05} value={settings.stability} onChange={(event) => update("stability", Number(event.target.value))} className="mt-2 w-full accent-violet-600" /></label>
+        <label className="text-xs font-bold text-slate-700">유사도 · {settings.similarityBoost.toFixed(2)}<input type="range" min={0} max={1} step={0.05} value={settings.similarityBoost} onChange={(event) => update("similarityBoost", Number(event.target.value))} className="mt-2 w-full accent-violet-600" /></label>
+      </div>
+      <label className="block text-xs font-bold text-slate-700">스타일 강조 · {settings.style.toFixed(2)}<input type="range" min={0} max={1} step={0.05} value={settings.style} onChange={(event) => update("style", Number(event.target.value))} className="mt-2 w-full accent-violet-600" /></label>
+      <label className="block text-xs font-bold text-slate-700">텍스트 정규화<select value={settings.textNormalization} onChange={(event) => update("textNormalization", event.target.value as VoiceGenerationInput["textNormalization"])} className="mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-normal"><option value="auto">자동</option><option value="on">항상 적용</option><option value="off">사용 안 함</option></select></label>
+      <label className="flex items-center gap-2 text-xs font-bold text-slate-700"><input type="checkbox" checked={settings.timestamps} onChange={(event) => update("timestamps", event.target.checked)} />지원 시 발화 타임스탬프 함께 저장</label>
+    </div>
+    <button type="button" disabled={busy || !configuredVoiceModel || !project.script.text.trim() || !settings.voice.trim()} onClick={() => onGenerateVoice(settings)} className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-bold text-white disabled:opacity-50"><Icon name="audio" className="h-4 w-4" />{candidates.length ? "전체 더빙 후보 추가 생성" : "전체 더빙 생성"}</button>
+    {!configuredVoiceModel && <p className="rounded-xl bg-rose-50 p-3 text-xs font-semibold leading-5 text-rose-700">.env.local에 FAL_VOICE_MODEL을 설정해 주세요.</p>}
+    {project.voice.error && <p className="rounded-xl bg-rose-50 p-3 text-xs font-semibold leading-5 text-rose-700">{project.voice.error}</p>}
+    {candidates.length > 0 && <div className="space-y-2 rounded-xl bg-slate-50 p-3">
+      <label className="block text-xs font-bold text-slate-600">대표 더빙<select disabled={busy} value={project.voice.selectedAssetId ?? ""} onChange={(event) => onVoiceConfiguration({ action: "select-voice", assetId: event.target.value })} className="mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold">{candidates.map((asset) => <option key={asset.id} value={asset.id}>{asset.label}{asset.stale.isStale ? " · 확인 필요" : ""}</option>)}</select></label>
+      {selected && <><audio key={selected.id} controls preload="metadata" className="w-full"><source src={`/api/projects/${project.project.id}/files/content?path=${encodeURIComponent(selected.relativePath)}`} />브라우저에서 오디오 재생을 지원하지 않습니다.</audio><p className="text-[11px] font-semibold text-slate-500">{selectedTimestamps > 0 ? `타임스탬프 ${selectedTimestamps}개 저장됨` : "저장된 타임스탬프 없음"}</p></>}
+    </div>}
+    <p className="rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-600">재생성해도 기존 MP3 후보는 삭제하지 않습니다. 장면별 싱크 조절은 최종 편집 단계에서 처리합니다.</p>
+  </div>;
+}
+
 export function ScriptStepPanel({
   project,
   busy,
@@ -252,7 +322,7 @@ export function ScriptStepPanel({
   );
 }
 
-export function DetailPanel({ project, selectedStep, selectedFile, context, busy, configuredImageModel, configuredVideoModel, onProjectChange, onGenerate, onApplyScript, onGenerateImages, onGenerateVideoPrompts, onGenerateVideos }: { project: ProjectDocument; selectedStep: WorkflowStep; selectedFile: DashboardFile | undefined; context: PanelContext; busy: boolean; configuredImageModel: string | null; configuredVideoModel: string | null; onProjectChange: (project: ProjectDocument) => void; onGenerate: (input: ScriptGenerationInput) => void; onApplyScript: (narrations: string[]) => void; onGenerateImages: (sceneIds?: string[]) => void; onGenerateVideoPrompts: () => void; onGenerateVideos: (sceneIds?: string[]) => void }) {
+export function DetailPanel({ project, selectedStep, selectedFile, context, busy, configuredImageModel, configuredVideoModel, configuredVoiceModel, onProjectChange, onGenerate, onApplyScript, onGenerateImages, onGenerateVideoPrompts, onGenerateVideos, onGenerateVoice, onVoiceConfiguration }: { project: ProjectDocument; selectedStep: WorkflowStep; selectedFile: DashboardFile | undefined; context: PanelContext; busy: boolean; configuredImageModel: string | null; configuredVideoModel: string | null; configuredVoiceModel: string | null; onProjectChange: (project: ProjectDocument) => void; onGenerate: (input: ScriptGenerationInput) => void; onApplyScript: (narrations: string[]) => void; onGenerateImages: (sceneIds?: string[]) => void; onGenerateVideoPrompts: () => void; onGenerateVideos: (sceneIds?: string[]) => void; onGenerateVoice: (input: VoiceGenerationInput) => void; onVoiceConfiguration: (action: VoiceConfigurationAction) => void }) {
   return (
     <aside aria-labelledby="detail-heading" className="h-full min-w-0 overflow-y-auto rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)] sm:p-5">
       <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-600">{context === "file" ? "File preview" : context === "script" ? "Script" : "Step detail"}</p>
@@ -263,6 +333,8 @@ export function DetailPanel({ project, selectedStep, selectedFile, context, busy
         <ImageStepPanel project={project} busy={busy} configuredImageModel={configuredImageModel} onGenerateImages={onGenerateImages} onGenerateVideoPrompts={onGenerateVideoPrompts} />
       ) : context === "step" && selectedStep.id === "video" ? (
         <VideoStepPanel project={project} selectedFile={selectedFile} busy={busy} configuredVideoModel={configuredVideoModel} onGenerateVideos={onGenerateVideos} />
+      ) : context === "step" && selectedStep.id === "voice" ? (
+        <VoiceStepPanel project={project} busy={busy} configuredVoiceModel={configuredVoiceModel} onGenerateVoice={onGenerateVoice} onVoiceConfiguration={onVoiceConfiguration} />
       ) : context === "script" ? (
         <div className="space-y-3"><div className="rounded-2xl bg-linear-to-br from-violet-600 to-indigo-700 p-5 text-white"><p className="text-xs font-bold text-violet-200">전체 대본 · {project.script.targetDurationSeconds}초</p><h3 className="mt-2 text-xl font-black">{project.script.topic || "주제 미정"}</h3><p className="mt-4 max-h-72 overflow-auto text-sm leading-6 text-violet-50">{project.script.text || "대본이 없습니다."}</p></div><p className="rounded-xl bg-slate-50 p-3 text-xs font-semibold text-slate-600">장면 {project.scenes.length}개 · 이미지 대표 선택 {project.scenes.filter((scene) => scene.selectedImageAssetId).length}개</p></div>
       ) : context === "file" && selectedFile ? (

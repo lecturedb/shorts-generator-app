@@ -19,6 +19,12 @@ export interface StaleState {
   reason?: string;
 }
 
+export interface VoiceTimestamp {
+  text: string;
+  startSeconds: number;
+  endSeconds: number;
+}
+
 export interface ProjectDocument {
   schemaVersion: typeof PROJECT_SCHEMA_VERSION;
   project: {
@@ -128,6 +134,10 @@ export interface ProjectDocument {
     status: SceneGenerationStatus;
     assetIds: string[];
     selectedAssetId: string | null;
+    timestamps: Array<{
+      assetId: string;
+      items: VoiceTimestamp[];
+    }>;
     error: string | null;
   };
   music: {
@@ -374,6 +384,7 @@ function migrateLegacyProject(root: Record<string, unknown>): Record<string, unk
       status: selectedVoice ? "완료" : "대기",
       assetIds: selectedVoice && typeof selectedVoice.id === "string" ? [selectedVoice.id] : [],
       selectedAssetId: selectedVoice && typeof selectedVoice.id === "string" ? selectedVoice.id : null,
+      timestamps: [],
       error: null,
     },
     music: {
@@ -541,6 +552,27 @@ export function parseProjectDocument(input: unknown): ProjectDocument {
   uniqueIds(runs, "runs");
 
   const voiceValue = objectAt(root.voice, "voice");
+  const voiceTimestamps = voiceValue.timestamps === undefined
+    ? []
+    : arrayAt(voiceValue.timestamps, "voice.timestamps").map((value, index) => {
+        const path = `voice.timestamps[${index}]`;
+        const entry = objectAt(value, path);
+        return {
+          assetId: idAt(entry.assetId, `${path}.assetId`),
+          items: arrayAt(entry.items, `${path}.items`).map((item, itemIndex) => {
+            const itemPath = `${path}.items[${itemIndex}]`;
+            const timestamp = objectAt(item, itemPath);
+            const startSeconds = numberAt(timestamp.startSeconds, `${itemPath}.startSeconds`);
+            const endSeconds = numberAt(timestamp.endSeconds, `${itemPath}.endSeconds`);
+            if (endSeconds < startSeconds) fail(`${itemPath}.endSeconds`, "시작 시간보다 빠를 수 없습니다.");
+            return {
+              text: stringAt(timestamp.text, `${itemPath}.text`, true),
+              startSeconds,
+              endSeconds,
+            };
+          }),
+        };
+      });
   const voice = {
     provider: nullableStringAt(voiceValue.provider, "voice.provider"),
     model: nullableStringAt(voiceValue.model, "voice.model"),
@@ -550,6 +582,7 @@ export function parseProjectDocument(input: unknown): ProjectDocument {
     status: sceneGenerationStatusAt(voiceValue.status, "voice.status"),
     assetIds: idListAt(voiceValue.assetIds, "voice.assetIds"),
     selectedAssetId: voiceValue.selectedAssetId === null ? null : idAt(voiceValue.selectedAssetId, "voice.selectedAssetId"),
+    timestamps: voiceTimestamps,
     error: nullableStringAt(voiceValue.error, "voice.error"),
   };
   if (voice.inputSource !== "script.text") fail("voice.inputSource", "전체 대본의 script.text만 참조해야 합니다.");
@@ -618,6 +651,17 @@ export function parseProjectDocument(input: unknown): ProjectDocument {
     requireAssets(run.resultAssetIds, `runs[${index}].resultAssetIds`);
   });
   requireAssets(voice.assetIds, "voice.assetIds");
+  requireAssets(voice.timestamps.map((entry) => entry.assetId), "voice.timestamps");
+  if (new Set(voice.timestamps.map((entry) => entry.assetId)).size !== voice.timestamps.length) {
+    fail("voice.timestamps", "같은 음성 자산의 타임스탬프를 중복 저장할 수 없습니다.");
+  }
+  voice.assetIds.forEach((assetId, index) => {
+    const asset = assets.find((candidate) => candidate.id === assetId);
+    if (asset?.role !== "narration") fail(`voice.assetIds[${index}]`, "더빙 자산 역할을 참조해야 합니다.");
+  });
+  voice.timestamps.forEach((entry, index) => {
+    if (!voice.assetIds.includes(entry.assetId)) fail(`voice.timestamps[${index}].assetId`, "더빙 후보 목록의 자산을 참조해야 합니다.");
+  });
   requireAssets(music.assetIds, "music.assetIds");
   if (voice.selectedAssetId !== null) requireAssets([voice.selectedAssetId], "voice.selectedAssetId");
   if (music.selectedAssetId !== null) requireAssets([music.selectedAssetId], "music.selectedAssetId");

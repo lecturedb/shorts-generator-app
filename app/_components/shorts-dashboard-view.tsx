@@ -6,6 +6,7 @@ import type { ProjectDocument } from "@/lib/project-schema";
 import type { ScriptGenerationInput } from "@/lib/script-generation-types";
 import type { ImageConfigurationAction } from "@/lib/image-generation-types";
 import type { VideoConfigurationAction } from "@/lib/video-generation-types";
+import type { VoiceConfigurationAction, VoiceGenerationInput } from "@/lib/voice-generation-types";
 import { Icon, type DashboardFile, type PanelContext } from "./shorts-dashboard-shared";
 import { DetailPanel, SceneTable } from "./shorts-dashboard-detail";
 import { SidebarContent } from "./shorts-dashboard-sidebar";
@@ -33,8 +34,11 @@ export interface DashboardViewProps {
   onGenerateVideoPrompts: () => void;
   onGenerateVideos: (sceneIds?: string[]) => void;
   onVideoConfiguration: (action: VideoConfigurationAction) => void;
+  onGenerateVoice: (input: VoiceGenerationInput) => void;
+  onVoiceConfiguration: (action: VoiceConfigurationAction) => void;
   configuredImageModel: string | null;
   configuredVideoModel: string | null;
+  configuredVoiceModel: string | null;
 }
 
 export function DashboardView({
@@ -59,8 +63,11 @@ export function DashboardView({
   onGenerateVideoPrompts,
   onGenerateVideos,
   onVideoConfiguration,
+  onGenerateVoice,
+  onVoiceConfiguration,
   configuredImageModel,
   configuredVideoModel,
+  configuredVoiceModel,
 }: DashboardViewProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -371,6 +378,7 @@ export function DashboardView({
                 steps={project.workflow.steps}
                 configuredImageModel={configuredImageModel}
                 configuredVideoModel={configuredVideoModel}
+                configuredVoiceModel={configuredVoiceModel}
                 selectedStepId={
                   panelContext === "step" ? selectedStep.id : null
                 }
@@ -401,8 +409,11 @@ export function DashboardView({
                 onGenerateImages={onGenerateImages}
                 onGenerateVideoPrompts={onGenerateVideoPrompts}
                 onGenerateVideos={onGenerateVideos}
+                onGenerateVoice={onGenerateVoice}
+                onVoiceConfiguration={onVoiceConfiguration}
                 configuredVideoModel={configuredVideoModel}
                 configuredImageModel={configuredImageModel}
+                configuredVoiceModel={configuredVoiceModel}
               />
             </div>
             </div>

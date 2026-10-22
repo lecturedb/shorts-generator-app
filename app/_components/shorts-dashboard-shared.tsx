@@ -293,12 +293,12 @@ export function providerModelLabel(provider: string | null, model: string | null
   return { provider: providerLabel ?? "제공사업자 미상", model };
 }
 
-export function workflowModelLabel(project: ProjectDocument, stepId: string, configuredImageModel: string | null = null, configuredVideoModel: string | null = null) {
+export function workflowModelLabel(project: ProjectDocument, stepId: string, configuredImageModel: string | null = null, configuredVideoModel: string | null = null, configuredVoiceModel: string | null = null) {
   if (stepId === "script") {
     return providerModelLabel(project.script.provider, project.script.model);
   }
   if (stepId === "voice") {
-    return providerModelLabel(project.voice.provider, project.voice.model);
+    return providerModelLabel(project.voice.provider ?? (configuredVoiceModel ? "fal.ai" : null), project.voice.model ?? configuredVoiceModel);
   }
   if (stepId === "music") {
     return providerModelLabel(project.music.provider, project.music.model);

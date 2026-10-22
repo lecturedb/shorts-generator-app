@@ -8,6 +8,7 @@ type WorkflowCardsProps = {
   project: ProjectDocument;
   configuredImageModel: string | null;
   configuredVideoModel: string | null;
+  configuredVoiceModel: string | null;
   steps: readonly WorkflowStep[];
   positions: Record<string, WorkflowPosition>;
   selectedStepId: string | null;
@@ -22,13 +23,13 @@ type WorkflowCardsProps = {
   onConnectionStart: (event: ReactPointerEvent<HTMLButtonElement>, source: string) => void;
 };
 
-export function WorkflowCards({ project, configuredImageModel, configuredVideoModel, steps, positions, selectedStepId, metrics, workflowSize, connectionDrag, onStepSelect, onCardDragStart, onCardDragMove, onCardDragEnd, onConnectionFinish, onConnectionStart }: WorkflowCardsProps) {
+export function WorkflowCards({ project, configuredImageModel, configuredVideoModel, configuredVoiceModel, steps, positions, selectedStepId, metrics, workflowSize, connectionDrag, onStepSelect, onCardDragStart, onCardDragMove, onCardDragEnd, onConnectionFinish, onConnectionStart }: WorkflowCardsProps) {
   return (
     <>
       {steps.map((step, index) => {
             const position = positions[step.id];
             const isSelected = selectedStepId === step.id;
-            const modelInfo = workflowModelLabel(project, step.id, configuredImageModel, configuredVideoModel);
+            const modelInfo = workflowModelLabel(project, step.id, configuredImageModel, configuredVideoModel, configuredVoiceModel);
             return (
               <article
                 key={step.id}

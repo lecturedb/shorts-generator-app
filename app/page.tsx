@@ -7,5 +7,6 @@ export default async function Home() {
   await connection();
   const configuredImageModel = process.env.FAL_IMAGE_MODEL?.trim() || null;
   const configuredVideoModel = process.env.FAL_VIDEO_MODEL?.trim() || null;
-  return <ShortsDashboard configuredImageModel={configuredImageModel} configuredVideoModel={configuredVideoModel} />;
+  const configuredVoiceModel = process.env.FAL_VOICE_MODEL?.trim() || null;
+  return <ShortsDashboard configuredImageModel={configuredImageModel} configuredVideoModel={configuredVideoModel} configuredVoiceModel={configuredVoiceModel} />;
 }

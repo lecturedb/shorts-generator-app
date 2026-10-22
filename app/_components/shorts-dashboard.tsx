@@ -7,6 +7,7 @@ import type { ProjectDocument } from "@/lib/project-schema";
 import type { ScriptGenerationInput, ScriptGenerationRunResult } from "@/lib/script-generation-types";
 import type { ImageConfigurationAction, ImageGenerationRunResult } from "@/lib/image-generation-types";
 import type { VideoConfigurationAction, VideoGenerationRunResult } from "@/lib/video-generation-types";
+import type { VoiceConfigurationAction, VoiceGenerationInput, VoiceGenerationRunResult } from "@/lib/voice-generation-types";
 import { DashboardView } from "./shorts-dashboard-view";
 import { Icon } from "./shorts-dashboard-shared";
 
@@ -75,7 +76,7 @@ function EmptyWorkspace({
     </main>
   );
 }
-export function ShortsDashboard({ configuredImageModel, configuredVideoModel }: { configuredImageModel: string | null; configuredVideoModel: string | null }) {
+export function ShortsDashboard({ configuredImageModel, configuredVideoModel, configuredVoiceModel }: { configuredImageModel: string | null; configuredVideoModel: string | null; configuredVoiceModel: string | null }) {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [project, setProject] = useState<ProjectDocument | null>(null);
   const [files, setFiles] = useState<ProjectFileEntry[]>([]);
@@ -417,6 +418,59 @@ export function ShortsDashboard({ configuredImageModel, configuredVideoModel }: 
     }
   };
 
+  const generateVoice = async (input: VoiceGenerationInput) => {
+    if (!project) return;
+    setBusy(true);
+    setError(null);
+    setNotice("전체 대본을 fal.ai 음성 모델에 요청했습니다.");
+    try {
+      const started = await requestJson<VoiceGenerationRunResult>(`/api/projects/${project.project.id}/voice-runs`, {
+        method: "POST",
+        body: JSON.stringify({ requestId: crypto.randomUUID(), input }),
+      });
+      setProject(started.project);
+      let latest = started;
+      for (let attempt = 0; attempt < 300 && latest.status === "실행 중"; attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 1_000));
+        const status = await requestJson<VoiceGenerationRunResult & { projects: ProjectSummary[] }>(
+          `/api/projects/${project.project.id}/voice-runs/${started.runId}`,
+        );
+        latest = status;
+        setProject(status.project);
+        setProjects(status.projects);
+      }
+      await refreshFiles(project.project.id);
+      const run = latest.project.runs.find((candidate) => candidate.id === latest.runId);
+      if (latest.status === "완료") setNotice(run?.message ?? "전체 더빙을 생성해 프로젝트에 저장했습니다.");
+      else if (latest.status === "실패" || latest.status === "확인 필요") throw new Error(run?.errorSummary ?? run?.message ?? "더빙 생성 결과를 확인해 주세요.");
+      else setNotice("더빙 생성은 서버에서 계속 진행 중입니다. 프로젝트를 다시 열어 상태를 확인할 수 있습니다.");
+    } catch (caught) {
+      showError(caught);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const updateVoiceConfiguration = async (action: VoiceConfigurationAction) => {
+    if (!project) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await requestJson<ProjectMutationResult>(`/api/projects/${project.project.id}/voice-configuration`, {
+        method: "PATCH",
+        body: JSON.stringify(action),
+      });
+      setProject(result.project);
+      setProjects(result.projects);
+      await refreshFiles(project.project.id);
+      setNotice("대표 더빙 후보를 저장했습니다.");
+    } catch (caught) {
+      showError(caught);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const deleteCurrentProject = async () => {
     if (!project) return;
     const confirmed = window.confirm(
@@ -495,8 +549,11 @@ export function ShortsDashboard({ configuredImageModel, configuredVideoModel }: 
       onGenerateVideoPrompts={() => void generateVideoPrompts()}
       onGenerateVideos={(sceneIds) => void generateVideos(sceneIds)}
       onVideoConfiguration={(action) => void updateVideoConfiguration(action)}
+      onGenerateVoice={(input) => void generateVoice(input)}
+      onVoiceConfiguration={(action) => void updateVoiceConfiguration(action)}
       configuredImageModel={configuredImageModel}
       configuredVideoModel={configuredVideoModel}
+      configuredVoiceModel={configuredVoiceModel}
     />
   );
 }

@@ -11,6 +11,7 @@ export function WorkflowEditor({
   onStepSelect,
   configuredImageModel,
   configuredVideoModel,
+  configuredVoiceModel,
 }: {
   project: ProjectDocument;
   projectId: string;
@@ -19,6 +20,7 @@ export function WorkflowEditor({
   onStepSelect: (stepId: string) => void;
   configuredImageModel: string | null;
   configuredVideoModel: string | null;
+  configuredVoiceModel: string | null;
 }) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
@@ -484,6 +486,7 @@ export function WorkflowEditor({
             project={project}
             configuredImageModel={configuredImageModel}
             configuredVideoModel={configuredVideoModel}
+            configuredVoiceModel={configuredVoiceModel}
             steps={steps}
             positions={positions}
             selectedStepId={selectedStepId}

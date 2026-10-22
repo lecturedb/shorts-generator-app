@@ -84,6 +84,26 @@ test("시각적 내용이 한국어가 아니면 거부한다", () => {
 
 test("생성 결과는 영상 계획을 비우고 기존 자산은 오래된 상태로 보존한다", async () => {
   const project = parseProjectDocument(JSON.parse(await readFile(fixtureUrl, "utf8")));
+  project.assets.push({
+    id: "asset-voice-existing",
+    label: "기존 전체 더빙",
+    kind: "audio",
+    role: "narration",
+    stageId: "voice",
+    relativePath: "audio/existing-narration.mp3",
+    createdAt: "2026-10-20T00:00:00.000Z",
+    selected: true,
+    sourceAssetIds: [],
+    stale: { isStale: false },
+    metadata: { format: "MP3" },
+  });
+  project.voice.assetIds.push("asset-voice-existing");
+  project.voice.selectedAssetId = "asset-voice-existing";
+  project.voice.status = "완료";
+  project.voice.timestamps.push({
+    assetId: "asset-voice-existing",
+    items: [{ text: "기존", startSeconds: 0, endSeconds: 0.4 }],
+  });
   const runId = "run-script-test-request";
   project.runs.push({
     id: runId,
@@ -109,6 +129,9 @@ test("생성 결과는 영상 계획을 비우고 기존 자산은 오래된 상
   assert.equal(validated.scenes.length, 2);
   assert.equal(validated.assets.length, beforeAssetCount);
   assert.equal(validated.assets.every((asset) => asset.stale.isStale), true);
+  assert.equal(validated.voice.status, "확인 필요");
+  assert.equal(validated.voice.selectedAssetId, "asset-voice-existing");
+  assert.equal(validated.voice.timestamps[0]?.items[0]?.text, "기존");
   assert.equal(validated.scenes.every((scene) => !scene.video.enabled), true);
   assert.equal(validated.scenes.every((scene) => scene.image.endpoint === "fal-ai/flux-2/flash"), true);
   assert.equal(validated.scenes.every((scene) => scene.video.endpoint === null), true);
