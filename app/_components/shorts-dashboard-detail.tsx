@@ -7,11 +7,12 @@ import type { ScriptGenerationInput } from "@/lib/script-generation-types";
 import type { ImageConfigurationAction } from "@/lib/image-generation-types";
 import type { VideoConfigurationAction } from "@/lib/video-generation-types";
 import type { VoiceConfigurationAction, VoiceGenerationInput } from "@/lib/voice-generation-types";
-import { editingMusicInput, markMusicStaleForDurationChange } from "@/lib/music-generation-project";
+import { markMusicStaleForDurationChange } from "@/lib/music-generation-project";
 import type { MusicConfigurationAction, MusicGenerationInput } from "@/lib/music-generation-types";
 import { musicModelFamily, musicModelMaximumDuration } from "@/lib/music-generation-validation";
 import { Icon, StatusMark, fileIcon, formatFileSize, statusTextClass, stepIcons, type DashboardFile, type PanelContext, type WorkflowStep } from "./shorts-dashboard-shared";
 import { PreviewVisual } from "./shorts-dashboard-preview";
+import { EditingPreview } from "./shorts-dashboard-timeline";
 
 export function SceneTable({
   project,
@@ -89,7 +90,10 @@ export function SceneTable({
                 <tr key={scene.id} className="align-top hover:bg-slate-50/60">
                   <td className="px-2 py-2"><span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-violet-100 font-black text-violet-700">{scene.order}</span></td>
                   <td className="whitespace-nowrap px-2 py-2 font-bold text-slate-700">
-                    <span className="block">{scene.startSeconds}–{scene.startSeconds + scene.durationSeconds}초</span>
+                    <span className="block">
+                      {scene.startSeconds.toFixed(1)}–
+                      {(scene.startSeconds + scene.durationSeconds).toFixed(1)}초
+                    </span>
                     {editable && <label className="mt-2 block text-[11px] font-semibold text-slate-500">길이(초)<input type="number" min={0.1} step={0.1} value={scene.durationSeconds} onChange={(event) => onSceneChange(scene.id, { durationSeconds: Number(event.target.value) })} className="mt-1 w-full rounded-md border border-slate-200 px-1.5 py-1 text-xs text-slate-700" /></label>}
                   </td>
                   <td className="wrap-break-word px-2 py-2 leading-4 text-slate-700">{editable ? <textarea aria-label={`${scene.order}번 장면 내레이션`} value={scene.narration} onChange={(event) => onSceneChange(scene.id, { narration: event.target.value })} className="min-h-24 w-full resize-y rounded-lg border border-slate-200 p-2 text-xs leading-5" /> : scene.narration}</td>
@@ -313,11 +317,6 @@ export function MusicStepPanel({ project, busy, configuredMusicModel, onGenerate
   </div>;
 }
 
-export function EditingInputPanel({ project }: { project: ProjectDocument }) {
-  const music = editingMusicInput(project);
-  return <div className="space-y-4"><div className="rounded-2xl bg-linear-to-br from-slate-800 to-slate-950 p-4 text-white"><p className="text-xs font-bold text-slate-300">최종 편집 입력</p><h3 className="mt-1 text-lg font-black">{project.editing.status}</h3></div><div className="space-y-2 rounded-xl bg-slate-50 p-3 text-xs"><p><span className="font-bold text-slate-500">목표 길이</span><span className="float-right font-black text-slate-900">{music.targetDurationSeconds}초</span></p><p className="clear-both"><span className="font-bold text-slate-500">배경음악</span><span className={`float-right max-w-44 truncate font-black ${music.needsReview ? "text-amber-700" : "text-slate-900"}`}>{music.label ?? "선택되지 않음"}{music.needsReview ? " · 확인 필요" : ""}</span></p>{music.relativePath && <p className="clear-both break-all pt-2 text-[11px] text-slate-500">{music.relativePath}</p>}</div><p className="rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-800">MP4 합성 실행은 13단계 범위입니다. 이 단계에서는 선택한 음악과 목표 길이를 입력으로 연결해 표시합니다.</p></div>;
-}
-
 export function ScriptStepPanel({
   project,
   busy,
@@ -388,7 +387,7 @@ export function ScriptStepPanel({
   );
 }
 
-export function DetailPanel({ project, selectedStep, selectedFile, context, busy, configuredImageModel, configuredVideoModel, configuredVoiceModel, configuredMusicModel, onProjectChange, onGenerate, onApplyScript, onGenerateImages, onGenerateVideoPrompts, onGenerateVideos, onGenerateVoice, onVoiceConfiguration, onGenerateMusic, onMusicConfiguration }: { project: ProjectDocument; selectedStep: WorkflowStep; selectedFile: DashboardFile | undefined; context: PanelContext; busy: boolean; configuredImageModel: string | null; configuredVideoModel: string | null; configuredVoiceModel: string | null; configuredMusicModel: string | null; onProjectChange: (project: ProjectDocument) => void; onGenerate: (input: ScriptGenerationInput) => void; onApplyScript: (narrations: string[]) => void; onGenerateImages: (sceneIds?: string[]) => void; onGenerateVideoPrompts: () => void; onGenerateVideos: (sceneIds?: string[]) => void; onGenerateVoice: (input: VoiceGenerationInput) => void; onVoiceConfiguration: (action: VoiceConfigurationAction) => void; onGenerateMusic: (input: MusicGenerationInput) => void; onMusicConfiguration: (action: MusicConfigurationAction) => void }) {
+export function DetailPanel({ project, selectedStep, selectedFile, context, busy, configuredImageModel, configuredVideoModel, configuredVoiceModel, configuredMusicModel, playheadSeconds, timelinePlaying, onTimelinePlayingChange, onPlayheadChange, onProjectChange, onGenerate, onApplyScript, onGenerateImages, onGenerateVideoPrompts, onGenerateVideos, onGenerateVoice, onVoiceConfiguration, onGenerateMusic, onMusicConfiguration }: { project: ProjectDocument; selectedStep: WorkflowStep; selectedFile: DashboardFile | undefined; context: PanelContext; busy: boolean; configuredImageModel: string | null; configuredVideoModel: string | null; configuredVoiceModel: string | null; configuredMusicModel: string | null; playheadSeconds: number; timelinePlaying: boolean; onTimelinePlayingChange: (playing: boolean) => void; onPlayheadChange: (seconds: number) => void; onProjectChange: (project: ProjectDocument) => void; onGenerate: (input: ScriptGenerationInput) => void; onApplyScript: (narrations: string[]) => void; onGenerateImages: (sceneIds?: string[]) => void; onGenerateVideoPrompts: () => void; onGenerateVideos: (sceneIds?: string[]) => void; onGenerateVoice: (input: VoiceGenerationInput) => void; onVoiceConfiguration: (action: VoiceConfigurationAction) => void; onGenerateMusic: (input: MusicGenerationInput) => void; onMusicConfiguration: (action: MusicConfigurationAction) => void }) {
   return (
     <aside aria-labelledby="detail-heading" className="h-full min-w-0 overflow-y-auto rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)] sm:p-5">
       <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-600">{context === "file" ? "File preview" : context === "script" ? "Script" : "Step detail"}</p>
@@ -404,7 +403,7 @@ export function DetailPanel({ project, selectedStep, selectedFile, context, busy
       ) : context === "step" && selectedStep.id === "music" ? (
         <MusicStepPanel project={project} busy={busy} configuredMusicModel={configuredMusicModel} onGenerateMusic={onGenerateMusic} onMusicConfiguration={onMusicConfiguration} />
       ) : context === "step" && selectedStep.id === "editing" ? (
-        <EditingInputPanel project={project} />
+        <EditingPreview project={project} playheadSeconds={playheadSeconds} playing={timelinePlaying} onPlayingChange={onTimelinePlayingChange} onPlayheadChange={onPlayheadChange} onProjectChange={onProjectChange} />
       ) : context === "script" ? (
         <div className="space-y-3"><div className="rounded-2xl bg-linear-to-br from-violet-600 to-indigo-700 p-5 text-white"><p className="text-xs font-bold text-violet-200">전체 대본 · {project.script.targetDurationSeconds}초</p><h3 className="mt-2 text-xl font-black">{project.script.topic || "주제 미정"}</h3><p className="mt-4 max-h-72 overflow-auto text-sm leading-6 text-violet-50">{project.script.text || "대본이 없습니다."}</p></div><p className="rounded-xl bg-slate-50 p-3 text-xs font-semibold text-slate-600">장면 {project.scenes.length}개 · 이미지 대표 선택 {project.scenes.filter((scene) => scene.selectedImageAssetId).length}개</p></div>
       ) : context === "file" && selectedFile ? (

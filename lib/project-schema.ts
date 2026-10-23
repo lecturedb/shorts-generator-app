@@ -25,6 +25,35 @@ export interface VoiceTimestamp {
   endSeconds: number;
 }
 
+export type NarrationAlignment = "provider-timestamps" | "estimated";
+
+export interface EditingTimeline {
+  sceneClips: Array<{
+    sceneId: string;
+    assetId: string;
+    mediaType: "image" | "video";
+    startSeconds: number;
+    durationSeconds: number;
+    trimStartSeconds: number;
+  }>;
+  narration: {
+    assetId: string;
+    startSeconds: number;
+    endSeconds: number;
+    alignment: NarrationAlignment;
+    segments: Array<{
+      sceneId: string;
+      startSeconds: number;
+      endSeconds: number;
+    }>;
+  } | null;
+  music: {
+    assetId: string;
+    startSeconds: number;
+    endSeconds: number;
+  } | null;
+}
+
 export interface ProjectDocument {
   schemaVersion: typeof PROJECT_SCHEMA_VERSION;
   project: {
@@ -153,6 +182,7 @@ export interface ProjectDocument {
   editing: {
     status: SceneGenerationStatus;
     error: string | null;
+    timeline: EditingTimeline | null;
   };
   output: {
     status: WorkflowStatus;
@@ -397,7 +427,7 @@ function migrateLegacyProject(root: Record<string, unknown>): Record<string, unk
       selectedAssetId: selectedMusic && typeof selectedMusic.id === "string" ? selectedMusic.id : null,
       error: null,
     },
-    editing: { status: "대기", error: null },
+    editing: { status: "대기", error: null, timeline: null },
   };
 }
 
@@ -600,9 +630,59 @@ export function parseProjectDocument(input: unknown): ProjectDocument {
   };
 
   const editingValue = objectAt(root.editing, "editing");
+  const timeline = editingValue.timeline === undefined || editingValue.timeline === null
+    ? null
+    : (() => {
+        const timelineValue = objectAt(editingValue.timeline, "editing.timeline");
+        const sceneClips = arrayAt(timelineValue.sceneClips, "editing.timeline.sceneClips").map((value, index) => {
+          const path = `editing.timeline.sceneClips[${index}]`;
+          const clip = objectAt(value, path);
+          const mediaType = stringAt(clip.mediaType, `${path}.mediaType`);
+          if (mediaType !== "image" && mediaType !== "video") fail(`${path}.mediaType`, "image 또는 video여야 합니다.");
+          return {
+            sceneId: idAt(clip.sceneId, `${path}.sceneId`),
+            assetId: idAt(clip.assetId, `${path}.assetId`),
+            mediaType: mediaType as "image" | "video",
+            startSeconds: numberAt(clip.startSeconds, `${path}.startSeconds`),
+            durationSeconds: numberAt(clip.durationSeconds, `${path}.durationSeconds`, 0.1),
+            trimStartSeconds: numberAt(clip.trimStartSeconds, `${path}.trimStartSeconds`),
+          };
+        });
+        const narration = timelineValue.narration === null ? null : (() => {
+          const narrationValue = objectAt(timelineValue.narration, "editing.timeline.narration");
+          const startSeconds = numberAt(narrationValue.startSeconds, "editing.timeline.narration.startSeconds");
+          const endSeconds = numberAt(narrationValue.endSeconds, "editing.timeline.narration.endSeconds");
+          if (endSeconds <= startSeconds) fail("editing.timeline.narration.endSeconds", "시작 시간보다 커야 합니다.");
+          const alignment = stringAt(narrationValue.alignment, "editing.timeline.narration.alignment");
+          if (alignment !== "provider-timestamps" && alignment !== "estimated") fail("editing.timeline.narration.alignment", "지원하지 않는 정렬 방식입니다.");
+          return {
+            assetId: idAt(narrationValue.assetId, "editing.timeline.narration.assetId"),
+            startSeconds,
+            endSeconds,
+            alignment: alignment as NarrationAlignment,
+            segments: arrayAt(narrationValue.segments, "editing.timeline.narration.segments").map((value, index) => {
+              const path = `editing.timeline.narration.segments[${index}]`;
+              const segment = objectAt(value, path);
+              const segmentStart = numberAt(segment.startSeconds, `${path}.startSeconds`);
+              const segmentEnd = numberAt(segment.endSeconds, `${path}.endSeconds`);
+              if (segmentEnd <= segmentStart) fail(`${path}.endSeconds`, "시작 시간보다 커야 합니다.");
+              return { sceneId: idAt(segment.sceneId, `${path}.sceneId`), startSeconds: segmentStart, endSeconds: segmentEnd };
+            }),
+          };
+        })();
+        const music = timelineValue.music === null ? null : (() => {
+          const musicValue = objectAt(timelineValue.music, "editing.timeline.music");
+          const startSeconds = numberAt(musicValue.startSeconds, "editing.timeline.music.startSeconds");
+          const endSeconds = numberAt(musicValue.endSeconds, "editing.timeline.music.endSeconds");
+          if (endSeconds <= startSeconds) fail("editing.timeline.music.endSeconds", "시작 시간보다 커야 합니다.");
+          return { assetId: idAt(musicValue.assetId, "editing.timeline.music.assetId"), startSeconds, endSeconds };
+        })();
+        return { sceneClips, narration, music };
+      })();
   const editing = {
     status: sceneGenerationStatusAt(editingValue.status, "editing.status"),
     error: nullableStringAt(editingValue.error, "editing.error"),
+    timeline,
   };
 
   const outputValue = objectAt(root.output, "output");
@@ -619,6 +699,8 @@ export function parseProjectDocument(input: unknown): ProjectDocument {
       musicVolume: numberAt(outputSettings.musicVolume, "output.settings.musicVolume", 0),
     },
   };
+  if (!new Set(["9:16", "1:1"]).has(output.settings.aspectRatio)) fail("output.settings.aspectRatio", "9:16 또는 1:1이어야 합니다.");
+  if (output.settings.width < 360 || output.settings.width > 4320 || output.settings.height < 360 || output.settings.height > 4320) fail("output.settings", "해상도는 각 변 360~4320px 범위여야 합니다.");
 
   const sceneIds = new Set(scenes.map((scene) => scene.id));
   const assetIds = new Set(assets.map((asset) => asset.id));
@@ -669,6 +751,43 @@ export function parseProjectDocument(input: unknown): ProjectDocument {
     requireAssets([output.assetId], "output.assetId");
     const finalAsset = assets.find((asset) => asset.id === output.assetId);
     if (finalAsset?.role !== "final-output") fail("output.assetId", "최종 출력 역할의 자산을 참조해야 합니다.");
+  }
+  if (editing.timeline) {
+    const clipSceneIds = new Set<string>();
+    editing.timeline.sceneClips.forEach((clip, index) => {
+      requireScene(clip.sceneId, `editing.timeline.sceneClips[${index}].sceneId`);
+      requireAssets([clip.assetId], `editing.timeline.sceneClips[${index}].assetId`);
+      if (clipSceneIds.has(clip.sceneId)) fail(`editing.timeline.sceneClips[${index}].sceneId`, "같은 장면을 중복 배치할 수 없습니다.");
+      clipSceneIds.add(clip.sceneId);
+      const asset = assets.find((candidate) => candidate.id === clip.assetId);
+      if (asset?.sceneId !== clip.sceneId || asset.kind !== clip.mediaType) fail(`editing.timeline.sceneClips[${index}].assetId`, "장면과 미디어 종류가 일치하는 대표 자산이어야 합니다.");
+      if (clip.mediaType === "video" && asset.metadata.durationSeconds !== undefined && clip.trimStartSeconds + clip.durationSeconds > asset.metadata.durationSeconds + 0.001) fail(`editing.timeline.sceneClips[${index}].durationSeconds`, "영상의 실제 길이를 초과할 수 없습니다.");
+    });
+    const orderedClips = [...editing.timeline.sceneClips].sort((left, right) => left.startSeconds - right.startSeconds);
+    orderedClips.forEach((clip, index) => {
+      const previous = orderedClips[index - 1];
+      if (previous && clip.startSeconds < previous.startSeconds + previous.durationSeconds - 0.001) fail(`editing.timeline.sceneClips[${index}].startSeconds`, "장면 클립 시간은 겹칠 수 없습니다.");
+    });
+    if (editing.timeline.narration) {
+      requireAssets([editing.timeline.narration.assetId], "editing.timeline.narration.assetId");
+      const asset = assets.find((candidate) => candidate.id === editing.timeline?.narration?.assetId);
+      if (asset?.role !== "narration") fail("editing.timeline.narration.assetId", "선택한 전체 더빙 자산이어야 합니다.");
+      const placementEnd = Math.max(
+        editing.timeline.narration.endSeconds,
+        ...editing.timeline.sceneClips.map(
+          (clip) => clip.startSeconds + clip.durationSeconds,
+        ),
+      );
+      editing.timeline.narration.segments.forEach((segment, index) => {
+        requireScene(segment.sceneId, `editing.timeline.narration.segments[${index}].sceneId`);
+        if (segment.startSeconds < 0 || segment.endSeconds > placementEnd) fail(`editing.timeline.narration.segments[${index}]`, "타임라인 시간 범위 안에 있어야 합니다.");
+      });
+    }
+    if (editing.timeline.music) {
+      requireAssets([editing.timeline.music.assetId], "editing.timeline.music.assetId");
+      const asset = assets.find((candidate) => candidate.id === editing.timeline?.music?.assetId);
+      if (asset?.role !== "background-music") fail("editing.timeline.music.assetId", "선택한 배경음악 자산이어야 합니다.");
+    }
   }
 
   return { schemaVersion: PROJECT_SCHEMA_VERSION, project, workflow: { steps }, script, scenes, assets, runs, voice, music, editing, output };

@@ -8,10 +8,12 @@ import type { ImageConfigurationAction } from "@/lib/image-generation-types";
 import type { VideoConfigurationAction } from "@/lib/video-generation-types";
 import type { VoiceConfigurationAction, VoiceGenerationInput } from "@/lib/voice-generation-types";
 import type { MusicConfigurationAction, MusicGenerationInput } from "@/lib/music-generation-types";
+import { createEditingTimeline } from "@/lib/editing-timeline";
 import { Icon, type DashboardFile, type PanelContext } from "./shorts-dashboard-shared";
 import { DetailPanel, SceneTable } from "./shorts-dashboard-detail";
 import { SidebarContent } from "./shorts-dashboard-sidebar";
 import { WorkflowEditor } from "./shorts-dashboard-workflow";
+import { TimelineEditor } from "./shorts-dashboard-timeline";
 
 export interface DashboardViewProps {
   project: ProjectDocument;
@@ -88,6 +90,8 @@ export function DashboardView({
       "",
   );
   const [panelContext, setPanelContext] = useState<PanelContext>("file");
+  const [playheadSeconds, setPlayheadSeconds] = useState(0);
+  const [timelinePlaying, setTimelinePlaying] = useState(false);
 
   const selectedStep =
     project.workflow.steps.find((step) => step.id === selectedStepId) ??
@@ -393,6 +397,13 @@ export function DashboardView({
                 onStepSelect={(stepId) => {
                   setSelectedStepId(stepId);
                   setPanelContext("step");
+                  setTimelinePlaying(false);
+                  setPlayheadSeconds(0);
+                  if (stepId === "editing" && !project.editing.timeline) {
+                    const next = structuredClone(project);
+                    next.editing.timeline = createEditingTimeline(next);
+                    onProjectChange(next);
+                  }
                 }}
               />
             </section>
@@ -425,11 +436,21 @@ export function DashboardView({
                 configuredImageModel={configuredImageModel}
                 configuredVoiceModel={configuredVoiceModel}
                 configuredMusicModel={configuredMusicModel}
+                playheadSeconds={playheadSeconds}
+                timelinePlaying={timelinePlaying}
+                onTimelinePlayingChange={setTimelinePlaying}
+                onPlayheadChange={setPlayheadSeconds}
               />
             </div>
             </div>
 
-            <SceneTable
+            {panelContext === "step" && selectedStep.id === "editing" ? <TimelineEditor
+              project={project}
+              files={files}
+              playheadSeconds={playheadSeconds}
+              onPlayheadChange={setPlayheadSeconds}
+              onProjectChange={onProjectChange}
+            /> : <SceneTable
               project={project}
               files={files}
               onFileSelect={selectFile}
@@ -442,7 +463,7 @@ export function DashboardView({
               onImageConfiguration={onImageConfiguration}
               onGenerateVideos={onGenerateVideos}
               onVideoConfiguration={onVideoConfiguration}
-            />
+            />}
 
           </main>
         </div>

@@ -88,7 +88,7 @@ export async function createProject(nameInput: unknown, options: ProjectStorageO
     runs: [],
     voice: { provider: null, model: null, endpoint: null, inputSource: "script.text", input: {}, status: "대기", assetIds: [], selectedAssetId: null, timestamps: [], error: null },
     music: { provider: null, model: null, endpoint: null, input: {}, status: "대기", assetIds: [], selectedAssetId: null, error: null },
-    editing: { status: "대기", error: null },
+    editing: { status: "대기", error: null, timeline: null },
     output: {
       status: "대기",
       assetId: null,

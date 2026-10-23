@@ -9,6 +9,7 @@ import type { ImageConfigurationAction, ImageGenerationRunResult } from "@/lib/i
 import type { VideoConfigurationAction, VideoGenerationRunResult } from "@/lib/video-generation-types";
 import type { VoiceConfigurationAction, VoiceGenerationInput, VoiceGenerationRunResult } from "@/lib/voice-generation-types";
 import type { MusicConfigurationAction, MusicGenerationInput, MusicGenerationRunResult } from "@/lib/music-generation-types";
+import { validateEditingTimeline } from "@/lib/editing-timeline";
 import { DashboardView } from "./shorts-dashboard-view";
 import { Icon } from "./shorts-dashboard-shared";
 
@@ -224,6 +225,14 @@ export function ShortsDashboard({ configuredImageModel, configuredVideoModel, co
 
   const saveCurrentProject = async () => {
     if (!project) return;
+    const timelineErrors = validateEditingTimeline(
+      project,
+      new Set(files.filter((file) => file.status === "available").map((file) => file.id)),
+    );
+    if (timelineErrors.length > 0) {
+      showError(`타임라인을 저장할 수 없습니다. ${timelineErrors.join(" ")}`);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {

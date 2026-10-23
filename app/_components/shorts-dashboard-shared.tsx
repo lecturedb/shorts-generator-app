@@ -1,6 +1,6 @@
 import {
   Check, ChevronDown, Copy, FileText, Folder, FolderOpen, House, Image as ImageIcon,
-  LayoutGrid, Maximize2, Menu, Mic, Music, Pencil, Play, Plus, Save,
+  LayoutGrid, Maximize2, Menu, Mic, Music, Pause, Pencil, Play, Plus, Save,
   Search, Settings, Sparkles, Trash2, Video, WandSparkles, X,
   type LucideIcon,
 } from "lucide-react";
@@ -24,6 +24,7 @@ export type IconName =
   | "image"
   | "menu"
   | "music"
+  | "pause"
   | "play"
   | "plus"
   | "save"
@@ -164,6 +165,7 @@ export const icons: Record<IconName, LucideIcon> = {
   image: ImageIcon,
   menu: Menu,
   music: Music,
+  pause: Pause,
   play: Play,
   plus: Plus,
   save: Save,
