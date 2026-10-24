@@ -14,7 +14,7 @@ function cloneFixture() {
 test("샘플 project.json의 모든 도메인과 참조를 검증한다", () => {
   const project = parseProjectDocument(cloneFixture());
 
-  assert.equal(project.schemaVersion, 3);
+  assert.equal(project.schemaVersion, 4);
   assert.equal(project.workflow.steps.length, 6);
   assert.equal(project.scenes.length, 7);
   assert.equal(project.scenes[0].video.endImageAssetId, "asset-image-scene-02");
@@ -51,7 +51,7 @@ test("스키마 v1 프로젝트를 자료 손실 없이 최신 읽기 모델로 
   delete legacy.project.settings.fps;
 
   const migrated = parseProjectDocument(legacy);
-  assert.equal(migrated.schemaVersion, 3);
+  assert.equal(migrated.schemaVersion, 4);
   assert.equal(migrated.scenes.length, 7);
   assert.equal(migrated.script.text, source.script.text);
   assert.equal(migrated.scenes[0].selectedImageAssetId, "asset-image-scene-01");

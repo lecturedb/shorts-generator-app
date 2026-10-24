@@ -9,6 +9,7 @@ import type { ImageConfigurationAction, ImageGenerationRunResult } from "@/lib/i
 import type { VideoConfigurationAction, VideoGenerationRunResult } from "@/lib/video-generation-types";
 import type { VoiceConfigurationAction, VoiceGenerationInput, VoiceGenerationRunResult } from "@/lib/voice-generation-types";
 import type { MusicConfigurationAction, MusicGenerationInput, MusicGenerationRunResult } from "@/lib/music-generation-types";
+import type { RenderRunResult } from "@/lib/rendering-types";
 import { validateEditingTimeline } from "@/lib/editing-timeline";
 import { DashboardView } from "./shorts-dashboard-view";
 import { Icon } from "./shorts-dashboard-shared";
@@ -87,6 +88,7 @@ export function ShortsDashboard({ configuredImageModel, configuredVideoModel, co
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [activeRenderRunId, setActiveRenderRunId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!notice && !error) return;
@@ -534,6 +536,67 @@ export function ShortsDashboard({ configuredImageModel, configuredVideoModel, co
     }
   };
 
+  const renderFinalVideo = async () => {
+    if (!project) return;
+    const timelineErrors = validateEditingTimeline(
+      project,
+      new Set(files.filter((file) => file.status === "available").map((file) => file.id)),
+    );
+    if (timelineErrors.length > 0) {
+      showError(`렌더링 입력을 확인해 주세요. ${timelineErrors.join(" ")}`);
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setNotice("프로젝트를 저장하고 Python·FFmpeg 렌더링을 준비하고 있습니다.");
+    try {
+      const saved = await requestJson<ProjectMutationResult>(
+        `/api/projects/${project.project.id}`,
+        { method: "PUT", body: JSON.stringify({ action: "save", project }) },
+      );
+      setProject(saved.project);
+      setProjects(saved.projects);
+      const started = await requestJson<RenderRunResult & { created: boolean }>(
+        `/api/projects/${project.project.id}/render-runs`,
+        { method: "POST", body: JSON.stringify({ requestId: crypto.randomUUID() }) },
+      );
+      setProject(started.project);
+      setActiveRenderRunId(started.runId);
+      setNotice("격리된 작업 디렉터리에서 최종 MP4를 합성하고 있습니다.");
+      let latest: RenderRunResult = started;
+      for (let attempt = 0; attempt < 3600 && latest.status === "실행 중"; attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 1_000));
+        const status = await requestJson<RenderRunResult & { projects: ProjectSummary[] }>(
+          `/api/projects/${project.project.id}/render-runs/${started.runId}`,
+        );
+        latest = status;
+        setProject(status.project);
+        setProjects(status.projects);
+      }
+      await refreshFiles(project.project.id);
+      const run = latest.project.runs.find((candidate) => candidate.id === latest.runId);
+      if (latest.status === "완료") setNotice(run?.message ?? "최종 MP4를 생성했습니다.");
+      else if (latest.status === "취소됨") setNotice(run?.message ?? "렌더링을 취소했습니다.");
+      else if (latest.status === "실패" || latest.status === "확인 필요") throw new Error(run?.errorSummary ?? run?.message ?? "렌더링 결과를 확인해 주세요.");
+      else setNotice("렌더링은 서버에서 계속 진행 중입니다. 프로젝트를 다시 열어 상태를 확인할 수 있습니다.");
+    } catch (caught) {
+      showError(caught);
+    } finally {
+      setActiveRenderRunId(null);
+      setBusy(false);
+    }
+  };
+
+  const cancelFinalVideo = async (runId: string) => {
+    if (!project) return;
+    try {
+      await requestJson<RenderRunResult>(`/api/projects/${project.project.id}/render-runs/${runId}`, { method: "DELETE" });
+      setNotice("렌더링 취소를 요청했습니다. 프로세스 종료 상태를 확인하고 있습니다.");
+    } catch (caught) {
+      showError(caught);
+    }
+  };
+
   const deleteCurrentProject = async () => {
     if (!project) return;
     const confirmed = window.confirm(
@@ -585,6 +648,10 @@ export function ShortsDashboard({ configuredImageModel, configuredVideoModel, co
       />
     );
 
+  const persistedRenderRunId = [...project.runs].reverse().find(
+    (run) => run.stageId === "editing" && run.status === "실행 중",
+  )?.id ?? null;
+
   return (
     <DashboardView
       key={project.project.id}
@@ -616,6 +683,9 @@ export function ShortsDashboard({ configuredImageModel, configuredVideoModel, co
       onVoiceConfiguration={(action) => void updateVoiceConfiguration(action)}
       onGenerateMusic={(input) => void generateMusic(input)}
       onMusicConfiguration={(action) => void updateMusicConfiguration(action)}
+      onRender={() => void renderFinalVideo()}
+      onCancelRender={(runId) => void cancelFinalVideo(runId)}
+      activeRenderRunId={activeRenderRunId ?? persistedRenderRunId}
       configuredImageModel={configuredImageModel}
       configuredVideoModel={configuredVideoModel}
       configuredVoiceModel={configuredVoiceModel}

@@ -134,6 +134,8 @@ export function PreviewVisual({
   const [expandedImageIndex, setExpandedImageIndex] = useState(0);
   const [expandedVideoIndex, setExpandedVideoIndex] = useState(0);
   const contentUrl = `/api/projects/${project.project.id}/files/content?path=${encodeURIComponent(file.relativePath)}`;
+  const mediaAspectRatio =
+    file.width && file.height ? `${file.width} / ${file.height}` : "16 / 9";
   const sceneImages = project.scenes.flatMap((scene) => {
     const asset = project.assets.find(
       (candidate) => candidate.id === scene.selectedImageAssetId,
@@ -156,14 +158,17 @@ export function PreviewVisual({
       ? [{ order: scene.order, label: asset.label, path: asset.relativePath }]
       : [];
   });
-  const sceneVideos = selectedSceneVideos.some(
-    (video) => video.path === file.relativePath,
-  )
-    ? selectedSceneVideos
-    : [
-        { order: null, label: file.label, path: file.relativePath },
-        ...selectedSceneVideos,
-      ];
+  const isFinalOutput = project.assets.some(
+    (asset) => asset.id === file.id && asset.role === "final-output",
+  );
+  const sceneVideos = isFinalOutput
+    ? [{ order: null, label: file.label, path: file.relativePath }]
+    : selectedSceneVideos.some((video) => video.path === file.relativePath)
+      ? selectedSceneVideos
+      : [
+          { order: null, label: file.label, path: file.relativePath },
+          ...selectedSceneVideos,
+        ];
   const expandedVideo = sceneVideos[expandedVideoIndex] ?? {
     order: null,
     label: file.label,
@@ -174,7 +179,16 @@ export function PreviewVisual({
   useEffect(() => {
     if (!imageExpanded && !videoExpanded) return;
     const previousRootOverflow = document.documentElement.style.overflow;
+    const previousRootOverscroll =
+      document.documentElement.style.overscrollBehavior;
     const previousOverflow = document.body.style.overflow;
+    const previousPosition = document.body.style.position;
+    const previousTop = document.body.style.top;
+    const previousLeft = document.body.style.left;
+    const previousRight = document.body.style.right;
+    const previousWidth = document.body.style.width;
+    const scrollX = window.scrollX;
+    const scrollY = window.scrollY;
     const closeOnEscape = (event: globalThis.KeyboardEvent) => {
       if (event.key === "Escape") {
         setImageExpanded(false);
@@ -182,11 +196,25 @@ export function PreviewVisual({
       }
     };
     document.documentElement.style.overflow = "hidden";
+    document.documentElement.style.overscrollBehavior = "none";
     document.body.style.overflow = "hidden";
+    document.body.style.position = "fixed";
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.left = `-${scrollX}px`;
+    document.body.style.right = "0";
+    document.body.style.width = "100%";
     window.addEventListener("keydown", closeOnEscape);
     return () => {
       document.documentElement.style.overflow = previousRootOverflow;
+      document.documentElement.style.overscrollBehavior =
+        previousRootOverscroll;
       document.body.style.overflow = previousOverflow;
+      document.body.style.position = previousPosition;
+      document.body.style.top = previousTop;
+      document.body.style.left = previousLeft;
+      document.body.style.right = previousRight;
+      document.body.style.width = previousWidth;
+      window.scrollTo(scrollX, scrollY);
       window.removeEventListener("keydown", closeOnEscape);
     };
   }, [imageExpanded, videoExpanded]);
@@ -358,7 +386,10 @@ export function PreviewVisual({
   if (file.kind === "video") {
     return (
       <>
-        <div className="relative aspect-video overflow-hidden rounded-2xl bg-slate-950">
+        <div
+          className="relative mx-auto w-full overflow-hidden rounded-2xl bg-slate-950"
+          style={{ aspectRatio: mediaAspectRatio }}
+        >
           <video
             key={contentUrl}
             controls

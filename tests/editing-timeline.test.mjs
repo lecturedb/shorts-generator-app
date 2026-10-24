@@ -34,6 +34,10 @@ test("대표 장면 미디어와 선택한 더빙·음악으로 타임라인을 
   assert.equal(timeline.music?.endSeconds, 45);
   assert.equal(timeline.music?.volume, 0.25);
   assert.equal(timeline.transitions.length, project.scenes.length - 1);
+  assert.equal(timeline.subtitles.cues.length, project.scenes.length);
+  assert.equal(timeline.subtitles.alignment, "estimated");
+  assert.equal(timeline.subtitles.style.fontSize, 70);
+  assert.equal(timeline.subtitles.cues[0].text, project.scenes[0].narration);
 });
 
 test("전환은 장면 길이와 조정한 내레이션 절대 위치를 유지한다", () => {
@@ -41,6 +45,7 @@ test("전환은 장면 길이와 조정한 내레이션 절대 위치를 유지�
   project.editing.timeline = createEditingTimeline(project);
   const moved = moveNarrationSegment(project, "scene-01", 2);
   const narrationBefore = structuredClone(moved.editing.timeline.narration.segments);
+  assert.equal(moved.editing.timeline.subtitles.cues[0].startSeconds, narrationBefore[0].startSeconds);
   const clipsBefore = structuredClone(moved.editing.timeline.sceneClips);
   const transitioned = updateSceneTransition(moved, "transition-scene-02", "dissolve", 1);
 
@@ -83,7 +88,7 @@ test("정지 이미지 모션과 오디오 효과 설정을 스키마가 보존�
   assert.equal(parsed.editing.timeline.music.fadeOutSeconds, 2);
 });
 
-test("기존 v2 타임라인의 음량 설정을 v3 효과 구조로 이관한다", () => {
+test("기존 v2 타임라인의 음량 설정을 최신 효과·자막 구조로 이관한다", () => {
   const source = projectWithAudio();
   source.editing.timeline = createEditingTimeline(source);
   source.schemaVersion = 2;
@@ -97,10 +102,13 @@ test("기존 v2 타임라인의 음량 설정을 v3 효과 구조로 이관한�
   delete source.editing.timeline.music.fadeOutSeconds;
 
   const migrated = parseProjectDocument(source);
-  assert.equal(migrated.schemaVersion, 3);
+  assert.equal(migrated.schemaVersion, 4);
   assert.equal(migrated.editing.timeline.transitions.length, migrated.scenes.length - 1);
   assert.equal(migrated.editing.timeline.narration.volume, 0.7);
   assert.equal(migrated.editing.timeline.music.volume, 0.15);
+  assert.equal(migrated.editing.timeline.subtitles.cues.length, migrated.scenes.length);
+  assert.equal(migrated.output.settings.fps, 30);
+  assert.equal(migrated.output.settings.quality, "standard");
 });
 
 test("공급자 타임스탬프를 대사 분량 추정보다 우선한다", () => {

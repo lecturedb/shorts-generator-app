@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ProjectSummary } from "@/lib/project-management-types";
 import type { ProjectDocument } from "@/lib/project-schema";
 import type { ScriptGenerationInput } from "@/lib/script-generation-types";
@@ -41,6 +41,9 @@ export interface DashboardViewProps {
   onVoiceConfiguration: (action: VoiceConfigurationAction) => void;
   onGenerateMusic: (input: MusicGenerationInput) => void;
   onMusicConfiguration: (action: MusicConfigurationAction) => void;
+  onRender: () => void;
+  onCancelRender: (runId: string) => void;
+  activeRenderRunId: string | null;
   configuredImageModel: string | null;
   configuredVideoModel: string | null;
   configuredVoiceModel: string | null;
@@ -73,6 +76,9 @@ export function DashboardView({
   onVoiceConfiguration,
   onGenerateMusic,
   onMusicConfiguration,
+  onRender,
+  onCancelRender,
+  activeRenderRunId,
   configuredImageModel,
   configuredVideoModel,
   configuredVoiceModel,
@@ -93,6 +99,24 @@ export function DashboardView({
   const [playheadSeconds, setPlayheadSeconds] = useState(0);
   const [timelinePlaying, setTimelinePlaying] = useState(false);
   const [timelineSelection, setTimelineSelection] = useState<TimelineSelection | null>(null);
+  const openedOutputAssetIdRef = useRef(project.output.assetId);
+
+  useEffect(() => {
+    const outputAssetId = project.output.assetId;
+    if (!outputAssetId) {
+      openedOutputAssetIdRef.current = null;
+      return;
+    }
+    if (
+      outputAssetId === openedOutputAssetIdRef.current ||
+      !files.some((file) => file.id === outputAssetId)
+    ) {
+      return;
+    }
+    setSelectedFileId(outputAssetId);
+    setPanelContext("file");
+    openedOutputAssetIdRef.current = outputAssetId;
+  }, [files, project.output.assetId]);
 
   const selectedStep =
     project.workflow.steps.find((step) => step.id === selectedStepId) ??
@@ -434,6 +458,9 @@ export function DashboardView({
                 onVoiceConfiguration={onVoiceConfiguration}
                 onGenerateMusic={onGenerateMusic}
                 onMusicConfiguration={onMusicConfiguration}
+                onRender={onRender}
+                onCancelRender={onCancelRender}
+                activeRenderRunId={activeRenderRunId}
                 configuredVideoModel={configuredVideoModel}
                 configuredImageModel={configuredImageModel}
                 configuredVoiceModel={configuredVoiceModel}

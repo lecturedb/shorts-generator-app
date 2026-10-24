@@ -1,5 +1,6 @@
-export const PROJECT_SCHEMA_VERSION = 3 as const;
-export const PREVIOUS_PROJECT_SCHEMA_VERSION = 2 as const;
+export const PROJECT_SCHEMA_VERSION = 4 as const;
+export const PREVIOUS_PROJECT_SCHEMA_VERSION = 3 as const;
+export const SECOND_PREVIOUS_PROJECT_SCHEMA_VERSION = 2 as const;
 export const LEGACY_PROJECT_SCHEMA_VERSION = 1 as const;
 
 export const workflowStatuses = ["대기", "실행 중", "완료", "실패", "취소됨", "확인 필요"] as const;
@@ -29,6 +30,9 @@ export interface VoiceTimestamp {
 export type NarrationAlignment = "provider-timestamps" | "estimated";
 export type SceneTransitionType = "none" | "dissolve" | "fade";
 export type ImageMotionType = "zoom-in" | "zoom-out" | "pan";
+export type SubtitleFont = "sans-serif" | "serif" | "monospace";
+export type SubtitlePosition = "top" | "middle" | "bottom";
+export type OutputQuality = "standard" | "high";
 
 export interface ImageMotion {
   type: ImageMotionType;
@@ -75,6 +79,25 @@ export interface EditingTimeline {
     fadeInSeconds: number;
     fadeOutSeconds: number;
   } | null;
+  subtitles: {
+    enabled: boolean;
+    alignment: NarrationAlignment;
+    style: {
+      fontFamily: SubtitleFont;
+      fontSize: number;
+      color: string;
+      outlineColor: string;
+      outlineWidth: number;
+      position: SubtitlePosition;
+    };
+    cues: Array<{
+      id: string;
+      sceneId: string;
+      text: string;
+      startSeconds: number;
+      endSeconds: number;
+    }>;
+  };
 }
 
 export interface ProjectDocument {
@@ -215,6 +238,8 @@ export interface ProjectDocument {
       aspectRatio: string;
       width: number;
       height: number;
+      fps: number;
+      quality: OutputQuality;
     };
   };
 }
@@ -229,6 +254,9 @@ const sceneGenerationStatusSet = new Set<string>(sceneGenerationStatuses);
 const sceneVideoModeSet = new Set<string>(["start_only", "start_end"] satisfies SceneVideoMode[]);
 const sceneTransitionTypeSet = new Set<string>(["none", "dissolve", "fade"] satisfies SceneTransitionType[]);
 const imageMotionTypeSet = new Set<string>(["zoom-in", "zoom-out", "pan"] satisfies ImageMotionType[]);
+const subtitleFontSet = new Set<string>(["sans-serif", "serif", "monospace"] satisfies SubtitleFont[]);
+const subtitlePositionSet = new Set<string>(["top", "middle", "bottom"] satisfies SubtitlePosition[]);
+const outputQualitySet = new Set<string>(["standard", "high"] satisfies OutputQuality[]);
 
 function fail(path: string, message: string): never {
   throw new ProjectValidationError(path, message);
@@ -335,6 +363,12 @@ function relativePathAt(value: unknown, path: string): string {
   return relativePath;
 }
 
+function colorAt(value: unknown, path: string): string {
+  const color = stringAt(value, path);
+  if (!/^#[0-9a-f]{6}$/i.test(color)) fail(path, "#RRGGBB 형식의 색상이어야 합니다.");
+  return color.toLowerCase();
+}
+
 function staleAt(value: unknown, path: string): StaleState {
   const stale = objectAt(value, path);
   const isStale = booleanAt(stale.isStale, `${path}.isStale`);
@@ -423,7 +457,7 @@ function migrateLegacyProject(root: Record<string, unknown>): Record<string, unk
   const selectedMusic = assets.find((asset) => asset.role === "background-music" && asset.selected === true);
   return {
     ...root,
-    schemaVersion: PREVIOUS_PROJECT_SCHEMA_VERSION,
+    schemaVersion: SECOND_PREVIOUS_PROJECT_SCHEMA_VERSION,
     project: { ...project, settings: { ...projectSettings, fps: 30 } },
     script: {
       provider: null,
@@ -460,13 +494,13 @@ function migrateLegacyProject(root: Record<string, unknown>): Record<string, unk
   };
 }
 
-function migratePreviousProject(root: Record<string, unknown>): Record<string, unknown> {
+function migrateSecondPreviousProject(root: Record<string, unknown>): Record<string, unknown> {
   const output = objectAt(root.output, "output");
   const outputSettings = objectAt(output.settings, "output.settings");
   const editing = objectAt(root.editing, "editing");
   const rawTimeline = editing.timeline;
   if (rawTimeline === undefined || rawTimeline === null) {
-    return { ...root, schemaVersion: PROJECT_SCHEMA_VERSION };
+    return { ...root, schemaVersion: PREVIOUS_PROJECT_SCHEMA_VERSION };
   }
 
   const timeline = objectAt(rawTimeline, "editing.timeline");
@@ -500,15 +534,91 @@ function migratePreviousProject(root: Record<string, unknown>): Record<string, u
 
   return {
     ...root,
-    schemaVersion: PROJECT_SCHEMA_VERSION,
+    schemaVersion: PREVIOUS_PROJECT_SCHEMA_VERSION,
     editing: { ...editing, timeline: { ...timeline, sceneClips, transitions, narration, music } },
+  };
+}
+
+function migratePreviousProject(root: Record<string, unknown>): Record<string, unknown> {
+  const project = objectAt(root.project, "project");
+  const projectSettings = objectAt(project.settings, "project.settings");
+  const output = objectAt(root.output, "output");
+  const outputSettings = objectAt(output.settings, "output.settings");
+  const editing = objectAt(root.editing, "editing");
+  const rawTimeline = editing.timeline;
+  if (rawTimeline === undefined || rawTimeline === null) {
+    return {
+      ...root,
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      output: {
+        ...output,
+        settings: {
+          ...outputSettings,
+          fps: typeof projectSettings.fps === "number" ? projectSettings.fps : 30,
+          quality: "standard",
+        },
+      },
+    };
+  }
+
+  const timeline = objectAt(rawTimeline, "editing.timeline");
+  const narration = timeline.narration === null ? null : objectAt(timeline.narration, "editing.timeline.narration");
+  const segments = narration === null ? [] : arrayAt(narration.segments, "editing.timeline.narration.segments");
+  const scenes = arrayAt(root.scenes, "scenes").map((value, index) => objectAt(value, `scenes[${index}]`));
+  const cues = scenes.map((scene, index) => {
+    const sceneId = String(scene.id ?? "");
+    const segment = segments.find((value) => objectAt(value, "editing.timeline.narration.segments[]").sceneId === sceneId);
+    const placement = segment ? objectAt(segment, "editing.timeline.narration.segments[]") : scene;
+    const startSeconds = typeof placement.startSeconds === "number" ? placement.startSeconds : 0;
+    const fallbackDuration = typeof scene.durationSeconds === "number" ? scene.durationSeconds : 1;
+    const endSeconds = typeof placement.endSeconds === "number" ? placement.endSeconds : startSeconds + fallbackDuration;
+    return {
+      id: `subtitle-${sceneId || index + 1}`,
+      sceneId,
+      text: typeof scene.narration === "string" ? scene.narration : "",
+      startSeconds,
+      endSeconds,
+    };
+  });
+  const alignment = narration?.alignment === "provider-timestamps" ? "provider-timestamps" : "estimated";
+  return {
+    ...root,
+    schemaVersion: PROJECT_SCHEMA_VERSION,
+    editing: {
+      ...editing,
+      timeline: {
+        ...timeline,
+        subtitles: {
+          enabled: true,
+          alignment,
+          style: {
+            fontFamily: "sans-serif",
+            fontSize: 70,
+            color: "#ffffff",
+            outlineColor: "#000000",
+            outlineWidth: 3,
+            position: "bottom",
+          },
+          cues,
+        },
+      },
+    },
+    output: {
+      ...output,
+      settings: {
+        ...outputSettings,
+        fps: typeof projectSettings.fps === "number" ? projectSettings.fps : 30,
+        quality: "standard",
+      },
+    },
   };
 }
 
 export function parseProjectDocument(input: unknown): ProjectDocument {
   const sourceRoot = objectAt(input, "project.json");
   const previousRoot = sourceRoot.schemaVersion === LEGACY_PROJECT_SCHEMA_VERSION ? migrateLegacyProject(sourceRoot) : sourceRoot;
-  const root = previousRoot.schemaVersion === PREVIOUS_PROJECT_SCHEMA_VERSION ? migratePreviousProject(previousRoot) : previousRoot;
+  const secondPreviousRoot = previousRoot.schemaVersion === SECOND_PREVIOUS_PROJECT_SCHEMA_VERSION ? migrateSecondPreviousProject(previousRoot) : previousRoot;
+  const root = secondPreviousRoot.schemaVersion === PREVIOUS_PROJECT_SCHEMA_VERSION ? migratePreviousProject(secondPreviousRoot) : secondPreviousRoot;
   if (root.schemaVersion !== PROJECT_SCHEMA_VERSION) fail("schemaVersion", `지원 버전 ${LEGACY_PROJECT_SCHEMA_VERSION}~${PROJECT_SCHEMA_VERSION}이어야 합니다.`);
 
   const projectValue = objectAt(root.project, "project");
@@ -800,7 +910,42 @@ export function parseProjectDocument(input: unknown): ProjectDocument {
             fadeOutSeconds: numberAt(musicValue.fadeOutSeconds, "editing.timeline.music.fadeOutSeconds"),
           };
         })();
-        return { sceneClips, transitions, narration, music };
+        const subtitlesValue = objectAt(timelineValue.subtitles, "editing.timeline.subtitles");
+        const alignment = stringAt(subtitlesValue.alignment, "editing.timeline.subtitles.alignment");
+        if (alignment !== "provider-timestamps" && alignment !== "estimated") fail("editing.timeline.subtitles.alignment", "지원하지 않는 정렬 방식입니다.");
+        const styleValue = objectAt(subtitlesValue.style, "editing.timeline.subtitles.style");
+        const fontFamily = stringAt(styleValue.fontFamily, "editing.timeline.subtitles.style.fontFamily");
+        if (!subtitleFontSet.has(fontFamily)) fail("editing.timeline.subtitles.style.fontFamily", "지원하지 않는 글꼴입니다.");
+        const position = stringAt(styleValue.position, "editing.timeline.subtitles.style.position");
+        if (!subtitlePositionSet.has(position)) fail("editing.timeline.subtitles.style.position", "지원하지 않는 자막 위치입니다.");
+        const subtitles = {
+          enabled: booleanAt(subtitlesValue.enabled, "editing.timeline.subtitles.enabled"),
+          alignment: alignment as NarrationAlignment,
+          style: {
+            fontFamily: fontFamily as SubtitleFont,
+            fontSize: boundedNumberAt(styleValue.fontSize, "editing.timeline.subtitles.style.fontSize", 12, 160),
+            color: colorAt(styleValue.color, "editing.timeline.subtitles.style.color"),
+            outlineColor: colorAt(styleValue.outlineColor, "editing.timeline.subtitles.style.outlineColor"),
+            outlineWidth: boundedNumberAt(styleValue.outlineWidth, "editing.timeline.subtitles.style.outlineWidth", 0, 12),
+            position: position as SubtitlePosition,
+          },
+          cues: arrayAt(subtitlesValue.cues, "editing.timeline.subtitles.cues").map((value, index) => {
+            const path = `editing.timeline.subtitles.cues[${index}]`;
+            const cue = objectAt(value, path);
+            const startSeconds = numberAt(cue.startSeconds, `${path}.startSeconds`);
+            const endSeconds = numberAt(cue.endSeconds, `${path}.endSeconds`);
+            if (endSeconds <= startSeconds) fail(`${path}.endSeconds`, "시작 시간보다 커야 합니다.");
+            return {
+              id: idAt(cue.id, `${path}.id`),
+              sceneId: idAt(cue.sceneId, `${path}.sceneId`),
+              text: stringAt(cue.text, `${path}.text`, true),
+              startSeconds,
+              endSeconds,
+            };
+          }),
+        };
+        uniqueIds(subtitles.cues, "editing.timeline.subtitles.cues");
+        return { sceneClips, transitions, narration, music, subtitles };
       })();
   const editing = {
     status: sceneGenerationStatusAt(editingValue.status, "editing.status"),
@@ -818,10 +963,14 @@ export function parseProjectDocument(input: unknown): ProjectDocument {
       aspectRatio: stringAt(outputSettings.aspectRatio, "output.settings.aspectRatio"),
       width: integerAt(outputSettings.width, "output.settings.width", 1),
       height: integerAt(outputSettings.height, "output.settings.height", 1),
+      fps: integerAt(outputSettings.fps, "output.settings.fps", 1),
+      quality: stringAt(outputSettings.quality, "output.settings.quality") as OutputQuality,
     },
   };
   if (!new Set(["9:16", "1:1"]).has(output.settings.aspectRatio)) fail("output.settings.aspectRatio", "9:16 또는 1:1이어야 합니다.");
   if (output.settings.width < 360 || output.settings.width > 4320 || output.settings.height < 360 || output.settings.height > 4320) fail("output.settings", "해상도는 각 변 360~4320px 범위여야 합니다.");
+  if (![24, 30, 60].includes(output.settings.fps)) fail("output.settings.fps", "24, 30, 60fps 중 하나여야 합니다.");
+  if (!outputQualitySet.has(output.settings.quality)) fail("output.settings.quality", "지원하지 않는 영상 품질입니다.");
 
   const sceneIds = new Set(scenes.map((scene) => scene.id));
   const assetIds = new Set(assets.map((asset) => asset.id));
@@ -936,6 +1085,9 @@ export function parseProjectDocument(input: unknown): ProjectDocument {
       const musicDuration = editing.timeline.music.endSeconds - editing.timeline.music.startSeconds;
       if (editing.timeline.music.fadeInSeconds > musicDuration || editing.timeline.music.fadeOutSeconds > musicDuration) fail("editing.timeline.music", "음악 페이드 시간은 배경음악 배치 길이를 초과할 수 없습니다.");
     }
+    editing.timeline.subtitles.cues.forEach((cue, index) => {
+      requireScene(cue.sceneId, `editing.timeline.subtitles.cues[${index}].sceneId`);
+    });
   }
 
   return { schemaVersion: PROJECT_SCHEMA_VERSION, project, workflow: { steps }, script, scenes, assets, runs, voice, music, editing, output };

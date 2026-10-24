@@ -11,6 +11,7 @@ import {
 import { createPortal } from "react-dom";
 
 import {
+  createSubtitleTrack,
   imageMotionPreset,
   moveNarrationSegment,
   resizeSceneClip,
@@ -28,6 +29,7 @@ export type TimelineSelection =
   | { type: "scene"; id: string }
   | { type: "transition"; id: string }
   | { type: "narration"; id: string }
+  | { type: "subtitle"; id: string }
   | { type: "music"; id: string };
 
 const DEFAULT_PIXELS_PER_SECOND = 48;
@@ -403,11 +405,7 @@ export function TimelineEditor({
                       : 16,
                   }}
                 >
-                  {active
-                    ? transition.type === "dissolve"
-                      ? "D"
-                      : "F"
-                    : "+"}
+                  {active ? (transition.type === "dissolve" ? "D" : "F") : "+"}
                 </button>
               );
             })}
@@ -553,6 +551,46 @@ export function TimelineEditor({
               <EmptyTrack text="선택한 배경음악이 없습니다" />
             )}
           </TrackRow>
+
+          <TrackRow
+            label="자막"
+            subtitle={
+              timeline.subtitles.enabled
+                ? `${timeline.subtitles.cues.length}개 · 표시`
+                : "숨김"
+            }
+            icon="document"
+            width={trackWidth}
+            pixelsPerSecond={pixelsPerSecond}
+          >
+            {timeline.subtitles.cues.map((cue) => (
+              <button
+                key={cue.id}
+                type="button"
+                className={`absolute top-3 h-12 overflow-hidden rounded-md border px-1.5 text-left ${selection?.type === "subtitle" && selection.id === cue.id ? "border-emerald-700 bg-emerald-100 ring-2 ring-emerald-300" : "border-emerald-300 bg-emerald-50 text-emerald-800"}`}
+                style={{
+                  left: cue.startSeconds * pixelsPerSecond,
+                  width: Math.max(
+                    36,
+                    (cue.endSeconds - cue.startSeconds) * pixelsPerSecond,
+                  ),
+                }}
+                onClick={() =>
+                  onSelectionChange({ type: "subtitle", id: cue.id })
+                }
+              >
+                <span
+                  className="line-clamp-2 text-[10px] leading-3 font-semibold"
+                  style={{ wordBreak: "keep-all", overflowWrap: "normal" }}
+                >
+                  {cue.text || "빈 자막"}
+                </span>
+              </button>
+            ))}
+            {timeline.subtitles.cues.length === 0 && (
+              <EmptyTrack text="생성된 자막이 없습니다" />
+            )}
+          </TrackRow>
         </div>
       </div>
       <p className="border-t border-slate-100 px-5 py-3 text-[11px] leading-5 text-slate-500">
@@ -575,7 +613,7 @@ function TrackRow({
 }: {
   label: string;
   subtitle?: string;
-  icon: "video" | "audio" | "music";
+  icon: "video" | "audio" | "music" | "document";
   width: number;
   pixelsPerSecond: number;
   children: React.ReactNode;
@@ -760,14 +798,8 @@ function PreviewMedia({
   const imageStyle = (() => {
     if (!motion) return undefined;
     const scale = interpolate(motion.start.scale, motion.end.scale);
-    const xPercent = interpolate(
-      motion.start.xPercent,
-      motion.end.xPercent,
-    );
-    const yPercent = interpolate(
-      motion.start.yPercent,
-      motion.end.yPercent,
-    );
+    const xPercent = interpolate(motion.start.xPercent, motion.end.xPercent);
+    const yPercent = interpolate(motion.start.yPercent, motion.end.yPercent);
     const maximumOffsetPercent = ((scale - 1) / (2 * scale)) * 100;
     const translateX = ((50 - xPercent) / 50) * maximumOffsetPercent;
     const translateY = ((50 - yPercent) / 50) * maximumOffsetPercent;
@@ -1105,6 +1137,63 @@ function EditingInspector({
     );
   }
 
+  if (selection.type === "subtitle") {
+    const cue = timeline.subtitles.cues.find(
+      (candidate) => candidate.id === selection.id,
+    );
+    if (!cue) return null;
+    const updateCue = (change: Partial<typeof cue>) => {
+      const next = structuredClone(project);
+      const target = next.editing.timeline?.subtitles.cues.find(
+        (candidate) => candidate.id === cue.id,
+      );
+      if (target) Object.assign(target, change);
+      markChanged(next, "자막 내용 또는 시간 변경");
+    };
+    return (
+      <div className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50/60 p-3">
+        <p className="text-xs font-extrabold text-slate-800">자막 구간</p>
+        <label className="block text-[11px] font-bold text-slate-600">
+          텍스트
+          <textarea
+            value={cue.text}
+            maxLength={500}
+            onChange={(event) => updateCue({ text: event.target.value })}
+            className="mt-1 min-h-20 w-full resize-y rounded-lg border border-emerald-200 bg-white p-2 text-xs font-normal leading-5"
+          />
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="text-[10px] font-bold text-slate-500">
+            시작
+            <input
+              type="number"
+              min={0}
+              step={0.01}
+              value={cue.startSeconds}
+              onChange={(event) =>
+                updateCue({ startSeconds: Number(event.target.value) })
+              }
+              className="mt-1 h-8 w-full rounded-md border border-slate-200 px-2 text-xs"
+            />
+          </label>
+          <label className="text-[10px] font-bold text-slate-500">
+            종료
+            <input
+              type="number"
+              min={cue.startSeconds + 0.01}
+              step={0.01}
+              value={cue.endSeconds}
+              onChange={(event) =>
+                updateCue({ endSeconds: Number(event.target.value) })
+              }
+              className="mt-1 h-8 w-full rounded-md border border-slate-200 px-2 text-xs"
+            />
+          </label>
+        </div>
+      </div>
+    );
+  }
+
   if (selection.type === "music" && timeline.music) {
     const musicDuration =
       timeline.music.endSeconds - timeline.music.startSeconds;
@@ -1175,6 +1264,10 @@ export function EditingPreview({
   onPlayingChange,
   onPlayheadChange,
   onProjectChange,
+  busy,
+  onRender,
+  onCancelRender,
+  activeRenderRunId,
 }: {
   project: ProjectDocument;
   playheadSeconds: number;
@@ -1183,6 +1276,10 @@ export function EditingPreview({
   onPlayingChange: (playing: boolean) => void;
   onPlayheadChange: (seconds: number) => void;
   onProjectChange: (project: ProjectDocument) => void;
+  busy: boolean;
+  onRender: () => void;
+  onCancelRender: (runId: string) => void;
+  activeRenderRunId: string | null;
 }) {
   const timeline = project.editing.timeline;
   const duration = timeline ? timelineDuration(timeline) : 1;
@@ -1190,6 +1287,13 @@ export function EditingPreview({
   const musicAudioRef = useRef<HTMLAudioElement>(null);
   const playheadRef = useRef(playheadSeconds);
   const [previewExpanded, setPreviewExpanded] = useState(false);
+  const activeSubtitle = timeline?.subtitles.enabled
+    ? timeline.subtitles.cues.find(
+        (cue) =>
+          playheadSeconds >= cue.startSeconds &&
+          playheadSeconds < cue.endSeconds,
+      )
+    : undefined;
   const activeTransition = timeline?.transitions.find((transition) => {
     if (transition.type === "none" || transition.durationSeconds <= 0)
       return false;
@@ -1213,8 +1317,7 @@ export function EditingPreview({
               Math.min(
                 1,
                 (playheadSeconds -
-                  (nextClip.startSeconds -
-                    activeTransition.durationSeconds)) /
+                  (nextClip.startSeconds - activeTransition.durationSeconds)) /
                   activeTransition.durationSeconds,
               ),
             )
@@ -1270,14 +1373,40 @@ export function EditingPreview({
 
   useEffect(() => {
     if (!previewExpanded) return;
+    const previousRootOverflow = document.documentElement.style.overflow;
+    const previousRootOverscroll =
+      document.documentElement.style.overscrollBehavior;
     const previousOverflow = document.body.style.overflow;
+    const previousPosition = document.body.style.position;
+    const previousTop = document.body.style.top;
+    const previousLeft = document.body.style.left;
+    const previousRight = document.body.style.right;
+    const previousWidth = document.body.style.width;
+    const scrollX = window.scrollX;
+    const scrollY = window.scrollY;
     const closeOnEscape = (event: globalThis.KeyboardEvent) => {
       if (event.key === "Escape") setPreviewExpanded(false);
     };
+    document.documentElement.style.overflow = "hidden";
+    document.documentElement.style.overscrollBehavior = "none";
     document.body.style.overflow = "hidden";
+    document.body.style.position = "fixed";
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.left = `-${scrollX}px`;
+    document.body.style.right = "0";
+    document.body.style.width = "100%";
     window.addEventListener("keydown", closeOnEscape);
     return () => {
+      document.documentElement.style.overflow = previousRootOverflow;
+      document.documentElement.style.overscrollBehavior =
+        previousRootOverscroll;
       document.body.style.overflow = previousOverflow;
+      document.body.style.position = previousPosition;
+      document.body.style.top = previousTop;
+      document.body.style.left = previousLeft;
+      document.body.style.right = previousRight;
+      document.body.style.width = previousWidth;
+      window.scrollTo(scrollX, scrollY);
       window.removeEventListener("keydown", closeOnEscape);
     };
   }, [previewExpanded]);
@@ -1376,11 +1505,26 @@ export function EditingPreview({
     );
   }, [narrationSources, playheadSeconds, playing, timeline]);
 
-  const updateOutput = (aspectRatio: string, width: number, height: number) => {
+  const updateOutput = (
+    change: Partial<ProjectDocument["output"]["settings"]>,
+  ) => {
     const next = structuredClone(project);
-    next.output.settings.aspectRatio = aspectRatio;
-    next.output.settings.width = width;
-    next.output.settings.height = height;
+    Object.assign(next.output.settings, change);
+    if (next.output.assetId) {
+      next.output.status = "확인 필요";
+      next.output.stale = { isStale: true, reason: "출력 설정 변경" };
+    }
+    onProjectChange(next);
+  };
+
+  const updateSubtitles = (change: Partial<EditingTimeline["subtitles"]>) => {
+    const next = structuredClone(project);
+    if (next.editing.timeline)
+      Object.assign(next.editing.timeline.subtitles, change);
+    if (next.output.assetId) {
+      next.output.status = "확인 필요";
+      next.output.stale = { isStale: true, reason: "자막 설정 변경" };
+    }
     onProjectChange(next);
   };
 
@@ -1413,6 +1557,52 @@ export function EditingPreview({
         />
       );
     });
+  };
+
+  const subtitleOverlay = () => {
+    if (!activeSubtitle || !timeline) return null;
+    const style = timeline.subtitles.style;
+    const output = project.output.settings;
+    const subtitleMargin = Math.max(24, Math.round(output.height * 0.07));
+    const horizontalInset = `${(subtitleMargin / output.width) * 100}%`;
+    const verticalMargin = `${(subtitleMargin / output.height) * 100}%`;
+    const vertical = style.position === "middle" ? "top-1/2 -translate-y-1/2" : "";
+    const verticalStyle =
+      style.position === "top"
+        ? { top: verticalMargin }
+        : style.position === "bottom"
+          ? { bottom: verticalMargin }
+          : undefined;
+    const fontFamily =
+      style.fontFamily === "serif"
+        ? "serif"
+        : style.fontFamily === "monospace"
+          ? "monospace"
+          : "sans-serif";
+    return (
+      <div
+        className={`pointer-events-none absolute z-20 text-center font-bold leading-tight ${vertical}`}
+        style={{
+          insetInline: horizontalInset,
+          ...verticalStyle,
+        }}
+      >
+        <span
+          className="whitespace-pre-wrap"
+          style={{
+            color: style.color,
+            fontFamily,
+            fontSize: `${(style.fontSize / output.width) * 100}cqw`,
+            WebkitTextStroke: `${(style.outlineWidth / output.width) * 100}cqw ${style.outlineColor}`,
+            paintOrder: "stroke fill",
+            wordBreak: "keep-all",
+            overflowWrap: "normal",
+          }}
+        >
+          {activeSubtitle.text}
+        </span>
+      </div>
+    );
   };
 
   const playbackControls = (modal = false) => (
@@ -1449,8 +1639,16 @@ export function EditingPreview({
   return (
     <div className="space-y-4">
       <div className="rounded-2xl bg-linear-to-br from-slate-950 to-slate-800 p-3">
-        <div className="relative mx-auto aspect-9/16 max-h-72 overflow-hidden rounded-xl bg-black">
+        <div
+          className="relative mx-auto overflow-hidden rounded-xl bg-black"
+          style={{
+            width: `min(100%, ${18 * (project.output.settings.width / project.output.settings.height)}rem)`,
+            aspectRatio: `${project.output.settings.width} / ${project.output.settings.height}`,
+            containerType: "inline-size",
+          }}
+        >
           {previewMedia("180px")}
+          {subtitleOverlay()}
           {narrationAsset?.kind === "audio" &&
             timeline?.narration?.segments.map((segment) => (
               <audio
@@ -1518,8 +1716,15 @@ export function EditingPreview({
               className="flex h-full min-h-0 w-full flex-col items-center justify-center gap-4"
               onClick={(event) => event.stopPropagation()}
             >
-              <div className="relative min-h-0 flex-1 aspect-9/16 overflow-hidden rounded-2xl bg-black shadow-2xl">
+              <div
+                className="relative min-h-0 flex-1 aspect-9/16 overflow-hidden rounded-2xl bg-black shadow-2xl"
+                style={{
+                  aspectRatio: `${project.output.settings.width} / ${project.output.settings.height}`,
+                  containerType: "inline-size",
+                }}
+              >
                 {previewMedia("50vw")}
+                {subtitleOverlay()}
                 {!asset && (
                   <div className="flex h-full items-center justify-center px-6 text-center text-sm font-semibold text-slate-400">
                     재생 위치에 표시할 미디어가 없습니다.
@@ -1539,6 +1744,154 @@ export function EditingPreview({
         selection={selection}
         onProjectChange={onProjectChange}
       />
+      {timeline && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-extrabold text-slate-800">자막 설정</p>
+            <button
+              type="button"
+              onClick={() => {
+                const generated = createSubtitleTrack(project, timeline);
+                updateSubtitles({
+                  alignment: generated.alignment,
+                  cues: generated.cues,
+                });
+              }}
+              className="rounded-lg border border-emerald-200 bg-white px-2 py-1 text-[10px] font-bold text-emerald-700"
+            >
+              대본에서 다시 생성
+            </button>
+          </div>
+          <label className="mt-3 flex items-center gap-2 text-[11px] font-bold text-slate-600">
+            <input
+              type="checkbox"
+              checked={timeline.subtitles.enabled}
+              onChange={(event) =>
+                updateSubtitles({ enabled: event.target.checked })
+              }
+              className="accent-emerald-600"
+            />
+            자막 표시
+          </label>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <label className="text-[10px] font-bold text-slate-500">
+              글꼴
+              <select
+                value={timeline.subtitles.style.fontFamily}
+                onChange={(event) =>
+                  updateSubtitles({
+                    style: {
+                      ...timeline.subtitles.style,
+                      fontFamily: event.target
+                        .value as EditingTimeline["subtitles"]["style"]["fontFamily"],
+                    },
+                  })
+                }
+                className="mt-1 h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-xs"
+              >
+                <option value="sans-serif">고딕</option>
+                <option value="serif">명조</option>
+                <option value="monospace">고정폭</option>
+              </select>
+            </label>
+            <label className="text-[10px] font-bold text-slate-500">
+              위치
+              <select
+                value={timeline.subtitles.style.position}
+                onChange={(event) =>
+                  updateSubtitles({
+                    style: {
+                      ...timeline.subtitles.style,
+                      position: event.target
+                        .value as EditingTimeline["subtitles"]["style"]["position"],
+                    },
+                  })
+                }
+                className="mt-1 h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-xs"
+              >
+                <option value="top">상단</option>
+                <option value="middle">중앙</option>
+                <option value="bottom">하단</option>
+              </select>
+            </label>
+            <label className="text-[10px] font-bold text-slate-500">
+              크기
+              <input
+                type="number"
+                min={12}
+                max={160}
+                value={timeline.subtitles.style.fontSize}
+                onChange={(event) =>
+                  updateSubtitles({
+                    style: {
+                      ...timeline.subtitles.style,
+                      fontSize: Number(event.target.value),
+                    },
+                  })
+                }
+                className="mt-1 h-8 w-full rounded-md border border-slate-200 px-2 text-xs"
+              />
+            </label>
+            <label className="text-[10px] font-bold text-slate-500">
+              외곽선
+              <input
+                type="number"
+                min={0}
+                max={12}
+                step={0.5}
+                value={timeline.subtitles.style.outlineWidth}
+                onChange={(event) =>
+                  updateSubtitles({
+                    style: {
+                      ...timeline.subtitles.style,
+                      outlineWidth: Number(event.target.value),
+                    },
+                  })
+                }
+                className="mt-1 h-8 w-full rounded-md border border-slate-200 px-2 text-xs"
+              />
+            </label>
+            <label className="text-[10px] font-bold text-slate-500">
+              글자색
+              <input
+                type="color"
+                value={timeline.subtitles.style.color}
+                onChange={(event) =>
+                  updateSubtitles({
+                    style: {
+                      ...timeline.subtitles.style,
+                      color: event.target.value,
+                    },
+                  })
+                }
+                className="mt-1 h-8 w-full rounded-md border border-slate-200 bg-white p-1"
+              />
+            </label>
+            <label className="text-[10px] font-bold text-slate-500">
+              외곽선색
+              <input
+                type="color"
+                value={timeline.subtitles.style.outlineColor}
+                onChange={(event) =>
+                  updateSubtitles({
+                    style: {
+                      ...timeline.subtitles.style,
+                      outlineColor: event.target.value,
+                    },
+                  })
+                }
+                className="mt-1 h-8 w-full rounded-md border border-slate-200 bg-white p-1"
+              />
+            </label>
+          </div>
+          <p className="mt-2 text-[10px] text-slate-500">
+            {timeline.subtitles.alignment === "provider-timestamps"
+              ? "공급자 타임스탬프 기준"
+              : "내레이션 길이와 대사 분량으로 추정"}{" "}
+            · 자막 {timeline.subtitles.cues.length}개
+          </p>
+        </div>
+      )}
       <div className="rounded-xl border border-slate-200 p-3">
         <p className="text-xs font-extrabold text-slate-800">출력 설정</p>
         <label className="mt-3 block text-[11px] font-bold text-slate-500">
@@ -1547,8 +1900,16 @@ export function EditingPreview({
             value={project.output.settings.aspectRatio}
             onChange={(event) =>
               event.target.value === "9:16"
-                ? updateOutput("9:16", 1080, 1920)
-                : updateOutput("1:1", 1080, 1080)
+                ? updateOutput({
+                    aspectRatio: "9:16",
+                    width: 1080,
+                    height: 1920,
+                  })
+                : updateOutput({
+                    aspectRatio: "1:1",
+                    width: 1080,
+                    height: 1080,
+                  })
             }
             className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-800"
           >
@@ -1566,11 +1927,7 @@ export function EditingPreview({
               step={2}
               value={project.output.settings.width}
               onChange={(event) =>
-                updateOutput(
-                  project.output.settings.aspectRatio,
-                  Number(event.target.value),
-                  project.output.settings.height,
-                )
+                updateOutput({ width: Number(event.target.value) })
               }
               className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-xs"
             />
@@ -1584,11 +1941,7 @@ export function EditingPreview({
               step={2}
               value={project.output.settings.height}
               onChange={(event) =>
-                updateOutput(
-                  project.output.settings.aspectRatio,
-                  project.output.settings.width,
-                  Number(event.target.value),
-                )
+                updateOutput({ height: Number(event.target.value) })
               }
               className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-xs"
             />
@@ -1597,7 +1950,93 @@ export function EditingPreview({
         <p className="mt-2 text-[10px] text-slate-400">
           {project.output.settings.width} × {project.output.settings.height}px
         </p>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <label className="text-[11px] font-bold text-slate-500">
+            프레임 레이트
+            <select
+              value={project.output.settings.fps}
+              onChange={(event) =>
+                updateOutput({ fps: Number(event.target.value) })
+              }
+              className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs"
+            >
+              <option value={24}>24 fps</option>
+              <option value={30}>30 fps</option>
+              <option value={60}>60 fps</option>
+            </select>
+          </label>
+          <label className="text-[11px] font-bold text-slate-500">
+            영상 품질
+            <select
+              value={project.output.settings.quality}
+              onChange={(event) =>
+                updateOutput({
+                  quality: event.target
+                    .value as ProjectDocument["output"]["settings"]["quality"],
+                })
+              }
+              className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs"
+            >
+              <option value="standard">표준</option>
+              <option value="high">고품질</option>
+            </select>
+          </label>
+        </div>
+        {activeRenderRunId ? (
+          <button
+            type="button"
+            onClick={() => onCancelRender(activeRenderRunId)}
+            className="mt-3 inline-flex h-10 w-full items-center justify-center rounded-xl border border-rose-200 bg-rose-50 text-xs font-extrabold text-rose-700"
+          >
+            렌더링 취소
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled={busy || !timeline?.sceneClips.length}
+            onClick={onRender}
+            className="mt-3 inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-violet-600 text-xs font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Icon name="play" className="h-4 w-4" />
+            {project.output.status === "실패" ||
+            project.output.status === "취소됨"
+              ? "최종 MP4 다시 렌더링"
+              : "최종 MP4 렌더링"}
+          </button>
+        )}
+        {project.editing.error && (
+          <p role="alert" className="mt-2 text-[10px] leading-4 text-rose-600">
+            {project.editing.error}
+          </p>
+        )}
       </div>
+      {project.runs.some((run) => run.stageId === "editing") && (
+        <div className="rounded-xl border border-slate-200 p-3">
+          <p className="text-xs font-extrabold text-slate-800">렌더링 이력</p>
+          <div className="mt-2 space-y-2">
+            {project.runs
+              .filter((run) => run.stageId === "editing")
+              .slice(-3)
+              .reverse()
+              .map((run) => (
+                <div
+                  key={run.id}
+                  className="rounded-lg bg-slate-50 p-2 text-[10px] leading-4 text-slate-600"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <strong className="text-slate-800">{run.status}</strong>
+                    <span>
+                      {run.startedAt
+                        ? new Date(run.startedAt).toLocaleString("ko-KR")
+                        : ""}
+                    </span>
+                  </div>
+                  <p className="mt-1">{run.errorSummary ?? run.message}</p>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
       <p className="rounded-xl bg-sky-50 p-3 text-xs leading-5 text-sky-800">
         내레이션 정렬:{" "}
         {timeline?.narration?.alignment === "provider-timestamps"

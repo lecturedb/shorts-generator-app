@@ -129,6 +129,48 @@ function narrationSegments(
   });
 }
 
+export function createSubtitleTrack(
+  project: ProjectDocument,
+  timeline: Pick<EditingTimeline, "sceneClips" | "narration">,
+): EditingTimeline["subtitles"] {
+  const segmentByScene = new Map(
+    timeline.narration?.segments.map((segment) => [segment.sceneId, segment]) ?? [],
+  );
+  const clipByScene = new Map(timeline.sceneClips.map((clip) => [clip.sceneId, clip]));
+  const cues = [...project.scenes]
+    .sort((left, right) => left.order - right.order)
+    .flatMap((scene) => {
+      const placement = segmentByScene.get(scene.id) ?? clipByScene.get(scene.id);
+      if (!placement || !scene.narration.trim()) return [];
+      const startSeconds = rounded(placement.startSeconds);
+      const endSeconds = rounded(
+        "endSeconds" in placement
+          ? placement.endSeconds
+          : placement.startSeconds + placement.durationSeconds,
+      );
+      return [{
+        id: `subtitle-${scene.id}`,
+        sceneId: scene.id,
+        text: scene.narration.trim(),
+        startSeconds,
+        endSeconds: Math.max(startSeconds + 0.01, endSeconds),
+      }];
+    });
+  return {
+    enabled: true,
+    alignment: timeline.narration?.alignment ?? "estimated",
+    style: {
+      fontFamily: "sans-serif",
+      fontSize: 70,
+      color: "#ffffff",
+      outlineColor: "#000000",
+      outlineWidth: 3,
+      position: "bottom",
+    },
+    cues,
+  };
+}
+
 export function createEditingTimeline(project: ProjectDocument): EditingTimeline {
   let sceneStart = 0;
   const sceneClips = [...project.scenes]
@@ -181,7 +223,7 @@ export function createEditingTimeline(project: ProjectDocument): EditingTimeline
     type: "none" as const,
     durationSeconds: 0,
   }));
-  return {
+  const timelineBase = {
     sceneClips,
     transitions,
     narration,
@@ -189,6 +231,7 @@ export function createEditingTimeline(project: ProjectDocument): EditingTimeline
       ? { assetId: musicAsset.id, startSeconds: 0, endSeconds: rounded(Math.min(musicDuration, sceneStart || musicDuration)), volume: 0.25, fadeInSeconds: 0, fadeOutSeconds: 0 }
       : null,
   };
+  return { ...timelineBase, subtitles: createSubtitleTrack(project, timelineBase) };
 }
 
 export function timelineDuration(timeline: EditingTimeline): number {
@@ -198,6 +241,7 @@ export function timelineDuration(timeline: EditingTimeline): number {
     ...(timeline.narration?.segments.map((segment) => segment.endSeconds) ?? []),
     timeline.narration?.endSeconds ?? 0,
     timeline.music?.endSeconds ?? 0,
+    ...timeline.subtitles.cues.map((cue) => cue.endSeconds),
   );
 }
 
@@ -245,6 +289,18 @@ export function validateEditingTimeline(
     if (availableAssetIds && !availableAssetIds.has(timeline.music.assetId)) errors.push("선택한 배경음악 파일이 누락되었습니다.");
     const musicDuration = timeline.music.endSeconds - timeline.music.startSeconds;
     if (timeline.music.fadeInSeconds > musicDuration || timeline.music.fadeOutSeconds > musicDuration) errors.push("배경음악 페이드 시간이 음악 길이를 벗어났습니다.");
+  }
+  const duration = Math.max(
+    1,
+    ...timeline.sceneClips.map((clip) => clip.startSeconds + clip.durationSeconds),
+    ...(timeline.narration?.segments.map((segment) => segment.endSeconds) ?? []),
+    timeline.narration?.endSeconds ?? 0,
+    timeline.music?.endSeconds ?? 0,
+  );
+  for (const cue of timeline.subtitles.cues) {
+    if (!project.scenes.some((scene) => scene.id === cue.sceneId)) errors.push(`${cue.id} 자막의 장면 참조가 올바르지 않습니다.`);
+    if (!cue.text.trim()) errors.push(`${cue.id} 자막 내용이 비어 있습니다.`);
+    if (cue.startSeconds < 0 || cue.endSeconds <= cue.startSeconds || cue.endSeconds > duration + 0.001) errors.push(`${cue.id} 자막 구간이 타임라인 범위를 벗어났습니다.`);
   }
   return errors;
 }
@@ -341,6 +397,11 @@ export function moveNarrationSegment(project: ProjectDocument, sceneId: string, 
   );
   segment.startSeconds = rounded(clampedStart);
   segment.endSeconds = rounded(clampedStart + duration);
+  const cue = timeline.subtitles.cues.find((candidate) => candidate.sceneId === sceneId);
+  if (cue) {
+    cue.startSeconds = segment.startSeconds;
+    cue.endSeconds = segment.endSeconds;
+  }
   markOutputStale(next, "내레이션 구간 이동");
   return next;
 }
