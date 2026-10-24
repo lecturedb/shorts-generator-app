@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { createEditingTimeline, moveNarrationSegment, resizeSceneClip, validateEditingTimeline } from "../lib/editing-timeline.ts";
+import { createEditingTimeline, imageMotionPreset, moveNarrationSegment, resizeSceneClip, updateImageMotion, updateSceneTransition, validateEditingTimeline } from "../lib/editing-timeline.ts";
 import { parseProjectDocument } from "../lib/project-schema.ts";
 
 const fixtureUrl = new URL("../fixtures/projects/sample-project/project.json", import.meta.url);
@@ -30,7 +30,77 @@ test("대표 장면 미디어와 선택한 더빙·음악으로 타임라인을 
   assert.equal(timeline.narration?.alignment, "estimated");
   assert.equal(timeline.narration?.endSeconds, 42);
   assert.equal(timeline.narration?.segments.length, project.scenes.length);
+  assert.equal(timeline.narration?.volume, 1);
   assert.equal(timeline.music?.endSeconds, 45);
+  assert.equal(timeline.music?.volume, 0.25);
+  assert.equal(timeline.transitions.length, project.scenes.length - 1);
+});
+
+test("전환은 장면 길이와 조정한 내레이션 절대 위치를 유지한다", () => {
+  const project = projectWithAudio();
+  project.editing.timeline = createEditingTimeline(project);
+  const moved = moveNarrationSegment(project, "scene-01", 2);
+  const narrationBefore = structuredClone(moved.editing.timeline.narration.segments);
+  const clipsBefore = structuredClone(moved.editing.timeline.sceneClips);
+  const transitioned = updateSceneTransition(moved, "transition-scene-02", "dissolve", 1);
+
+  assert.deepEqual(transitioned.editing.timeline.sceneClips, clipsBefore);
+  assert.deepEqual(transitioned.editing.timeline.narration.segments, narrationBefore);
+  assert.equal(transitioned.editing.timeline.transitions[0].type, "dissolve");
+});
+
+test("기존 겹침 방식으로 저장된 전환 타임라인을 순차 장면 배치로 복원한다", () => {
+  const project = projectWithAudio();
+  project.editing.timeline = createEditingTimeline(project);
+  project.editing.timeline.transitions[0].type = "dissolve";
+  project.editing.timeline.transitions[0].durationSeconds = 1;
+  for (let index = 1; index < project.editing.timeline.sceneClips.length; index += 1) {
+    const previous = project.editing.timeline.sceneClips[index - 1];
+    const transition = project.editing.timeline.transitions[index - 1];
+    project.editing.timeline.sceneClips[index].startSeconds =
+      previous.startSeconds + previous.durationSeconds - transition.durationSeconds;
+  }
+
+  const restored = parseProjectDocument(project);
+
+  assert.equal(restored.editing.timeline.sceneClips[1].startSeconds, 5);
+  assert.equal(restored.scenes[1].startSeconds, 5);
+  assert.equal(restored.editing.timeline.transitions[0].durationSeconds, 1);
+});
+
+test("정지 이미지 모션과 오디오 효과 설정을 스키마가 보존한다", () => {
+  const project = projectWithAudio();
+  project.editing.timeline = createEditingTimeline(project);
+  const withMotion = updateImageMotion(project, "scene-01", imageMotionPreset("zoom-in", 5));
+  withMotion.editing.timeline.narration.volume = 0.8;
+  withMotion.editing.timeline.music.volume = 0.2;
+  withMotion.editing.timeline.music.fadeInSeconds = 1.5;
+  withMotion.editing.timeline.music.fadeOutSeconds = 2;
+
+  const parsed = parseProjectDocument(withMotion);
+  assert.equal(parsed.editing.timeline.sceneClips[0].imageMotion.type, "zoom-in");
+  assert.equal(parsed.editing.timeline.narration.volume, 0.8);
+  assert.equal(parsed.editing.timeline.music.fadeOutSeconds, 2);
+});
+
+test("기존 v2 타임라인의 음량 설정을 v3 효과 구조로 이관한다", () => {
+  const source = projectWithAudio();
+  source.editing.timeline = createEditingTimeline(source);
+  source.schemaVersion = 2;
+  source.output.settings.narrationVolume = 0.7;
+  source.output.settings.musicVolume = 0.15;
+  delete source.editing.timeline.transitions;
+  for (const clip of source.editing.timeline.sceneClips) delete clip.imageMotion;
+  delete source.editing.timeline.narration.volume;
+  delete source.editing.timeline.music.volume;
+  delete source.editing.timeline.music.fadeInSeconds;
+  delete source.editing.timeline.music.fadeOutSeconds;
+
+  const migrated = parseProjectDocument(source);
+  assert.equal(migrated.schemaVersion, 3);
+  assert.equal(migrated.editing.timeline.transitions.length, migrated.scenes.length - 1);
+  assert.equal(migrated.editing.timeline.narration.volume, 0.7);
+  assert.equal(migrated.editing.timeline.music.volume, 0.15);
 });
 
 test("공급자 타임스탬프를 대사 분량 추정보다 우선한다", () => {

@@ -11,15 +11,24 @@ import {
 import { createPortal } from "react-dom";
 
 import {
+  imageMotionPreset,
   moveNarrationSegment,
   resizeSceneClip,
   timelineDuration,
+  updateImageMotion,
+  updateSceneTransition,
   validateEditingTimeline,
 } from "@/lib/editing-timeline";
 import { summarizeAudioSamples, type WaveformBar } from "@/lib/audio-waveform";
 import type { EditingTimeline, ProjectDocument } from "@/lib/project-schema";
 import type { DashboardFile } from "./shorts-dashboard-shared";
 import { Icon } from "./shorts-dashboard-shared";
+
+export type TimelineSelection =
+  | { type: "scene"; id: string }
+  | { type: "transition"; id: string }
+  | { type: "narration"; id: string }
+  | { type: "music"; id: string };
 
 const DEFAULT_PIXELS_PER_SECOND = 48;
 const MIN_PIXELS_PER_SECOND = 8;
@@ -37,6 +46,14 @@ function timeLabel(seconds: number) {
 
 function contentUrl(projectId: string, relativePath: string) {
   return `/api/projects/${projectId}/files/content?path=${encodeURIComponent(relativePath)}`;
+}
+
+function motionLabel(
+  type: NonNullable<
+    EditingTimeline["sceneClips"][number]["imageMotion"]
+  >["type"],
+) {
+  return type === "zoom-in" ? "확대" : type === "zoom-out" ? "축소" : "이동";
 }
 
 function narrationSourceRanges(
@@ -57,12 +74,16 @@ export function TimelineEditor({
   project,
   files,
   playheadSeconds,
+  selection,
+  onSelectionChange,
   onPlayheadChange,
   onProjectChange,
 }: {
   project: ProjectDocument;
   files: readonly DashboardFile[];
   playheadSeconds: number;
+  selection: TimelineSelection | null;
+  onSelectionChange: (selection: TimelineSelection) => void;
   onPlayheadChange: (seconds: number) => void;
   onProjectChange: (project: ProjectDocument) => void;
 }) {
@@ -283,10 +304,20 @@ export function TimelineEditor({
               return (
                 <div
                   key={clip.sceneId}
-                  className="absolute top-1 h-16 overflow-hidden rounded-xl border border-violet-300 bg-violet-100 shadow-sm"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`${scene?.order ?? ""}번 장면 설정`}
+                  className={`absolute top-1 h-16 overflow-hidden rounded-xl border bg-violet-100 shadow-sm ${selection?.type === "scene" && selection.id === clip.sceneId ? "z-10 border-violet-700 ring-2 ring-violet-400" : "border-violet-300"}`}
                   style={{
                     left: clip.startSeconds * pixelsPerSecond,
                     width: Math.max(44, clip.durationSeconds * pixelsPerSecond),
+                  }}
+                  onClick={() =>
+                    onSelectionChange({ type: "scene", id: clip.sceneId })
+                  }
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ")
+                      onSelectionChange({ type: "scene", id: clip.sceneId });
                   }}
                 >
                   <div className="flex h-full items-center gap-2 overflow-hidden pr-3">
@@ -315,7 +346,11 @@ export function TimelineEditor({
                       </strong>
                       <span className="mt-1 block text-[10px] font-bold text-violet-700">
                         {clip.durationSeconds.toFixed(1)}초 ·{" "}
-                        {clip.mediaType === "video" ? "영상" : "이미지"}
+                        {clip.mediaType === "video"
+                          ? "영상"
+                          : clip.imageMotion
+                            ? `이미지 · ${motionLabel(clip.imageMotion.type)}`
+                            : "이미지"}
                       </span>
                     </span>
                   </div>
@@ -335,11 +370,52 @@ export function TimelineEditor({
                 </div>
               );
             })}
+            {timeline.transitions.map((transition) => {
+              const nextClip = timeline.sceneClips.find(
+                (clip) => clip.sceneId === transition.toSceneId,
+              );
+              if (!nextClip) return null;
+              const active = transition.type !== "none";
+              return (
+                <button
+                  key={transition.id}
+                  type="button"
+                  aria-label={`${transition.fromSceneId}에서 ${transition.toSceneId} 전환 설정`}
+                  onClick={() =>
+                    onSelectionChange({ type: "transition", id: transition.id })
+                  }
+                  title={
+                    active
+                      ? `${transition.type === "dissolve" ? "디졸브" : "페이드"} ${transition.durationSeconds.toFixed(1)}초`
+                      : "전환 추가"
+                  }
+                  className={`absolute top-1 z-20 flex h-4 items-center justify-center border text-[8px] leading-none font-bold shadow-sm ${active ? "rounded-md border-amber-400 bg-amber-300/80 text-amber-950" : "-translate-x-1/2 rounded-full border-slate-300 bg-white text-slate-500"} ${selection?.type === "transition" && selection.id === transition.id ? "ring-2 ring-amber-400 ring-offset-1" : ""}`}
+                  style={{
+                    left:
+                      (nextClip.startSeconds -
+                        (active ? transition.durationSeconds : 0)) *
+                      pixelsPerSecond,
+                    width: active
+                      ? Math.max(
+                          16,
+                          transition.durationSeconds * pixelsPerSecond,
+                        )
+                      : 16,
+                  }}
+                >
+                  {active
+                    ? transition.type === "dissolve"
+                      ? "D"
+                      : "F"
+                    : "+"}
+                </button>
+              );
+            })}
           </TrackRow>
 
           <TrackRow
             label="내레이션"
-            subtitle="진함 발화 · 옅음 무음"
+            subtitle={`음량 ${Math.round((timeline.narration?.volume ?? 1) * 100)}%`}
             icon="audio"
             width={trackWidth}
             pixelsPerSecond={pixelsPerSecond}
@@ -352,7 +428,10 @@ export function TimelineEditor({
               return (
                 <div
                   key={segment.sceneId}
-                  className="absolute top-2 z-10 h-14 touch-none cursor-grab select-none overflow-hidden rounded-lg border border-sky-400/45 bg-sky-100/35 active:cursor-grabbing"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`장면 ${scene?.order ?? ""} 내레이션 설정`}
+                  className={`absolute top-2 z-10 h-14 touch-none cursor-grab select-none overflow-hidden rounded-lg border bg-sky-100/35 active:cursor-grabbing ${selection?.type === "narration" && selection.id === segment.sceneId ? "border-sky-700 ring-2 ring-sky-300" : "border-sky-400/45"}`}
                   style={{
                     left: segment.startSeconds * pixelsPerSecond,
                     width: Math.max(
@@ -369,6 +448,19 @@ export function TimelineEditor({
                       segment.startSeconds,
                     )
                   }
+                  onClick={() =>
+                    onSelectionChange({
+                      type: "narration",
+                      id: segment.sceneId,
+                    })
+                  }
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ")
+                      onSelectionChange({
+                        type: "narration",
+                        id: segment.sceneId,
+                      });
+                  }}
                 >
                   {narrationAsset && source && (
                     <AudioWaveform
@@ -397,14 +489,20 @@ export function TimelineEditor({
 
           <TrackRow
             label="배경음악"
-            subtitle="음량 파형"
+            subtitle={
+              timeline.music
+                ? `음량 ${Math.round(timeline.music.volume * 100)}% · 페이드 ${timeline.music.fadeInSeconds}/${timeline.music.fadeOutSeconds}s`
+                : "음량 파형"
+            }
             icon="music"
             width={trackWidth}
             pixelsPerSecond={pixelsPerSecond}
           >
             {timeline.music ? (
               <div
-                className="absolute top-2 flex h-14 items-end overflow-hidden rounded-lg border border-fuchsia-300/65 bg-fuchsia-100/50 px-3 pb-1.5"
+                role="button"
+                tabIndex={0}
+                className={`absolute top-2 flex h-14 items-end overflow-hidden rounded-lg border bg-fuchsia-100/50 px-3 pb-1.5 ${selection?.type === "music" ? "border-fuchsia-700 ring-2 ring-fuchsia-300" : "border-fuchsia-300/65"}`}
                 style={{
                   left: timeline.music.startSeconds * pixelsPerSecond,
                   width: Math.max(
@@ -412,6 +510,19 @@ export function TimelineEditor({
                     (timeline.music.endSeconds - timeline.music.startSeconds) *
                       pixelsPerSecond,
                   ),
+                }}
+                onClick={() =>
+                  onSelectionChange({
+                    type: "music",
+                    id: timeline.music!.assetId,
+                  })
+                }
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ")
+                    onSelectionChange({
+                      type: "music",
+                      id: timeline.music!.assetId,
+                    });
                 }}
               >
                 {musicAsset && (
@@ -612,10 +723,455 @@ function EmptyTrack({ text }: { text: string }) {
   );
 }
 
+function PreviewMedia({
+  projectId,
+  asset,
+  clip,
+  playheadSeconds,
+  playing,
+  opacity,
+  sizes,
+}: {
+  projectId: string;
+  asset: ProjectDocument["assets"][number];
+  clip: EditingTimeline["sceneClips"][number];
+  playheadSeconds: number;
+  playing: boolean;
+  opacity: number;
+  sizes: string;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const localSeconds = Math.max(0, playheadSeconds - clip.startSeconds);
+  const localSecondsRef = useRef(localSeconds);
+  const motion = clip.imageMotion;
+  const motionProgress = motion
+    ? Math.max(
+        0,
+        Math.min(
+          1,
+          (localSeconds - motion.startSeconds) / motion.durationSeconds,
+        ),
+      )
+    : 0;
+  const easedMotionProgress =
+    motionProgress * motionProgress * (3 - 2 * motionProgress);
+  const interpolate = (start: number, end: number) =>
+    start + (end - start) * easedMotionProgress;
+  const imageStyle = (() => {
+    if (!motion) return undefined;
+    const scale = interpolate(motion.start.scale, motion.end.scale);
+    const xPercent = interpolate(
+      motion.start.xPercent,
+      motion.end.xPercent,
+    );
+    const yPercent = interpolate(
+      motion.start.yPercent,
+      motion.end.yPercent,
+    );
+    const maximumOffsetPercent = ((scale - 1) / (2 * scale)) * 100;
+    const translateX = ((50 - xPercent) / 50) * maximumOffsetPercent;
+    const translateY = ((50 - yPercent) / 50) * maximumOffsetPercent;
+    return {
+      objectPosition: "50% 50%",
+      transform: `scale(${scale}) translate3d(${translateX}%, ${translateY}%, 0)`,
+      transformOrigin: "center",
+    };
+  })();
+
+  useEffect(() => {
+    localSecondsRef.current = localSeconds;
+  }, [localSeconds]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const expectedTime = clip.trimStartSeconds + localSecondsRef.current;
+    const synchronize = () => {
+      if (Math.abs(video.currentTime - expectedTime) > 0.08)
+        video.currentTime = expectedTime;
+      if (playing) void video.play().catch(() => undefined);
+      else video.pause();
+    };
+    if (video.readyState >= HTMLMediaElement.HAVE_METADATA) synchronize();
+    else video.addEventListener("loadedmetadata", synchronize, { once: true });
+    return () => video.removeEventListener("loadedmetadata", synchronize);
+  }, [clip.trimStartSeconds, playing]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || video.readyState < HTMLMediaElement.HAVE_METADATA) return;
+    const expectedTime = clip.trimStartSeconds + localSeconds;
+    if (!playing || Math.abs(video.currentTime - expectedTime) > 0.35)
+      video.currentTime = expectedTime;
+  }, [clip.trimStartSeconds, localSeconds, playing]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    return () => video?.pause();
+  }, []);
+
+  return (
+    <div
+      className="absolute inset-0 overflow-hidden bg-black"
+      style={{ opacity }}
+    >
+      {asset.kind === "image" ? (
+        <Image
+          src={contentUrl(projectId, asset.relativePath)}
+          alt=""
+          fill
+          unoptimized
+          sizes={sizes}
+          className="object-cover will-change-transform"
+          style={imageStyle}
+        />
+      ) : (
+        <video
+          ref={videoRef}
+          src={contentUrl(projectId, asset.relativePath)}
+          muted
+          playsInline
+          preload="auto"
+          className="h-full w-full object-cover"
+        />
+      )}
+    </div>
+  );
+}
+
+function EditingInspector({
+  project,
+  selection,
+  onProjectChange,
+}: {
+  project: ProjectDocument;
+  selection: TimelineSelection | null;
+  onProjectChange: (project: ProjectDocument) => void;
+}) {
+  const timeline = project.editing.timeline;
+  if (!timeline || !selection)
+    return (
+      <p className="rounded-xl border border-dashed border-slate-300 p-3 text-xs leading-5 text-slate-500">
+        타임라인에서 장면, 전환 구간 또는 오디오를 선택하면 상세 옵션이
+        표시됩니다.
+      </p>
+    );
+
+  const markChanged = (next: ProjectDocument, reason: string) => {
+    if (next.output.assetId) {
+      next.output.status = "확인 필요";
+      next.output.stale = { isStale: true, reason };
+    }
+    onProjectChange(next);
+  };
+
+  if (selection.type === "transition") {
+    const transition = timeline.transitions.find(
+      (candidate) => candidate.id === selection.id,
+    );
+    if (!transition) return null;
+    const from = project.scenes.find(
+      (scene) => scene.id === transition.fromSceneId,
+    );
+    const to = project.scenes.find(
+      (scene) => scene.id === transition.toSceneId,
+    );
+    return (
+      <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+        <div>
+          <p className="text-xs font-extrabold text-slate-800">장면 전환</p>
+          <p className="mt-1 text-[10px] font-semibold text-slate-500">
+            장면 {from?.order ?? "?"} → {to?.order ?? "?"}
+          </p>
+        </div>
+        <label className="block text-[11px] font-bold text-slate-600">
+          전환 종류
+          <select
+            value={transition.type}
+            onChange={(event) =>
+              onProjectChange(
+                updateSceneTransition(
+                  project,
+                  transition.id,
+                  event.target.value as "none" | "dissolve" | "fade",
+                  transition.durationSeconds || 0.6,
+                ),
+              )
+            }
+            className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs"
+          >
+            <option value="none">없음</option>
+            <option value="dissolve">디졸브</option>
+            <option value="fade">페이드</option>
+          </select>
+        </label>
+        <label className="block text-[11px] font-bold text-slate-600">
+          적용 시간 · {transition.durationSeconds.toFixed(1)}초
+          <input
+            type="range"
+            min={0.1}
+            max={2}
+            step={0.1}
+            disabled={transition.type === "none"}
+            value={Math.max(0.1, transition.durationSeconds)}
+            onChange={(event) =>
+              onProjectChange(
+                updateSceneTransition(
+                  project,
+                  transition.id,
+                  transition.type,
+                  Number(event.target.value),
+                ),
+              )
+            }
+            className="mt-1 w-full accent-amber-500 disabled:opacity-40"
+          />
+        </label>
+        <p className="text-[10px] leading-4 text-slate-500">
+          전환은 영상 장면만 겹치며 저장된 내레이션 위치는 유지됩니다.
+        </p>
+      </div>
+    );
+  }
+
+  if (selection.type === "scene") {
+    const clip = timeline.sceneClips.find(
+      (candidate) => candidate.sceneId === selection.id,
+    );
+    const scene = project.scenes.find(
+      (candidate) => candidate.id === selection.id,
+    );
+    if (!clip) return null;
+    if (clip.mediaType !== "image")
+      return (
+        <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-600">
+          장면 {scene?.order ?? "?"}은 영상 장면입니다. 정지 이미지 모션은
+          이미지 장면에만 적용됩니다.
+        </p>
+      );
+    const motion = clip.imageMotion;
+    const updateMotion = (nextMotion: NonNullable<typeof motion>) =>
+      onProjectChange(updateImageMotion(project, clip.sceneId, nextMotion));
+    const pointInput = (label: string, key: "start" | "end") =>
+      motion && (
+        <fieldset className="rounded-lg border border-slate-200 bg-white p-2">
+          <legend className="px-1 text-[10px] font-extrabold text-slate-500">
+            {label}
+          </legend>
+          <div className="grid grid-cols-3 gap-1.5">
+            {(["xPercent", "yPercent", "scale"] as const).map((field) => (
+              <label
+                key={field}
+                className="text-[9px] font-bold text-slate-500"
+              >
+                {field === "xPercent"
+                  ? "가로 %"
+                  : field === "yPercent"
+                    ? "세로 %"
+                    : "배율"}
+                <input
+                  type="number"
+                  min={field === "scale" ? 1 : 0}
+                  max={field === "scale" ? 3 : 100}
+                  step={field === "scale" ? 0.05 : 1}
+                  value={motion[key][field]}
+                  onChange={(event) =>
+                    updateMotion({
+                      ...motion,
+                      [key]: {
+                        ...motion[key],
+                        [field]: Number(event.target.value),
+                      },
+                    })
+                  }
+                  className="mt-1 h-8 w-full rounded-md border border-slate-200 px-1.5 text-xs"
+                />
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      );
+    return (
+      <div className="space-y-3 rounded-xl border border-violet-200 bg-violet-50/40 p-3">
+        <div>
+          <p className="text-xs font-extrabold text-slate-800">
+            장면 {scene?.order ?? "?"} 이미지 효과
+          </p>
+          <p className="mt-1 text-[10px] text-slate-500">
+            범용 키프레임 없이 시작·종료 상태만 설정합니다.
+          </p>
+        </div>
+        <label className="block text-[11px] font-bold text-slate-600">
+          효과
+          <select
+            value={motion?.type ?? "none"}
+            onChange={(event) =>
+              onProjectChange(
+                updateImageMotion(
+                  project,
+                  clip.sceneId,
+                  event.target.value === "none"
+                    ? null
+                    : imageMotionPreset(
+                        event.target.value as "zoom-in" | "zoom-out" | "pan",
+                        clip.durationSeconds,
+                      ),
+                ),
+              )
+            }
+            className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs"
+          >
+            <option value="none">없음</option>
+            <option value="zoom-in">확대</option>
+            <option value="zoom-out">축소</option>
+            <option value="pan">이동</option>
+          </select>
+        </label>
+        {motion && (
+          <>
+            {pointInput("시작 위치·배율", "start")}
+            {pointInput("종료 위치·배율", "end")}
+            <div className="grid grid-cols-2 gap-2">
+              <label className="text-[10px] font-bold text-slate-500">
+                시작 시간
+                <input
+                  type="number"
+                  min={0}
+                  max={Math.max(0, clip.durationSeconds - 0.1)}
+                  step={0.1}
+                  value={motion.startSeconds}
+                  onChange={(event) => {
+                    const startSeconds = Number(event.target.value);
+                    updateMotion({
+                      ...motion,
+                      startSeconds,
+                      durationSeconds: Math.min(
+                        motion.durationSeconds,
+                        clip.durationSeconds - startSeconds,
+                      ),
+                    });
+                  }}
+                  className="mt-1 h-8 w-full rounded-md border border-slate-200 px-2 text-xs"
+                />
+              </label>
+              <label className="text-[10px] font-bold text-slate-500">
+                적용 시간
+                <input
+                  type="number"
+                  min={0.1}
+                  max={clip.durationSeconds - motion.startSeconds}
+                  step={0.1}
+                  value={motion.durationSeconds}
+                  onChange={(event) =>
+                    updateMotion({
+                      ...motion,
+                      durationSeconds: Number(event.target.value),
+                    })
+                  }
+                  className="mt-1 h-8 w-full rounded-md border border-slate-200 px-2 text-xs"
+                />
+              </label>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  if (selection.type === "narration" && timeline.narration) {
+    return (
+      <div className="rounded-xl border border-sky-200 bg-sky-50/60 p-3">
+        <p className="text-xs font-extrabold text-slate-800">전체 내레이션</p>
+        <label className="mt-3 block text-[11px] font-bold text-slate-600">
+          음량 · {Math.round(timeline.narration.volume * 100)}%
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.01}
+            value={timeline.narration.volume}
+            onChange={(event) => {
+              const next = structuredClone(project);
+              if (next.editing.timeline?.narration)
+                next.editing.timeline.narration.volume = Number(
+                  event.target.value,
+                );
+              markChanged(next, "내레이션 음량 변경");
+            }}
+            className="mt-1 w-full accent-sky-600"
+          />
+        </label>
+      </div>
+    );
+  }
+
+  if (selection.type === "music" && timeline.music) {
+    const musicDuration =
+      timeline.music.endSeconds - timeline.music.startSeconds;
+    const updateMusic = (change: Partial<typeof timeline.music>) => {
+      const next = structuredClone(project);
+      if (next.editing.timeline?.music)
+        Object.assign(next.editing.timeline.music, change);
+      markChanged(next, "배경음악 설정 변경");
+    };
+    return (
+      <div className="space-y-3 rounded-xl border border-fuchsia-200 bg-fuchsia-50/60 p-3">
+        <p className="text-xs font-extrabold text-slate-800">배경음악</p>
+        <label className="block text-[11px] font-bold text-slate-600">
+          음량 · {Math.round(timeline.music.volume * 100)}%
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.01}
+            value={timeline.music.volume}
+            onChange={(event) =>
+              updateMusic({ volume: Number(event.target.value) })
+            }
+            className="mt-1 w-full accent-fuchsia-600"
+          />
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="text-[10px] font-bold text-slate-500">
+            페이드 인
+            <input
+              type="number"
+              min={0}
+              max={musicDuration}
+              step={0.1}
+              value={timeline.music.fadeInSeconds}
+              onChange={(event) =>
+                updateMusic({ fadeInSeconds: Number(event.target.value) })
+              }
+              className="mt-1 h-8 w-full rounded-md border border-slate-200 px-2 text-xs"
+            />
+          </label>
+          <label className="text-[10px] font-bold text-slate-500">
+            페이드 아웃
+            <input
+              type="number"
+              min={0}
+              max={musicDuration}
+              step={0.1}
+              value={timeline.music.fadeOutSeconds}
+              onChange={(event) =>
+                updateMusic({ fadeOutSeconds: Number(event.target.value) })
+              }
+              className="mt-1 h-8 w-full rounded-md border border-slate-200 px-2 text-xs"
+            />
+          </label>
+        </div>
+      </div>
+    );
+  }
+  return null;
+}
+
 export function EditingPreview({
   project,
   playheadSeconds,
   playing,
+  selection,
   onPlayingChange,
   onPlayheadChange,
   onProjectChange,
@@ -623,30 +1179,77 @@ export function EditingPreview({
   project: ProjectDocument;
   playheadSeconds: number;
   playing: boolean;
+  selection: TimelineSelection | null;
   onPlayingChange: (playing: boolean) => void;
   onPlayheadChange: (seconds: number) => void;
   onProjectChange: (project: ProjectDocument) => void;
 }) {
   const timeline = project.editing.timeline;
   const duration = timeline ? timelineDuration(timeline) : 1;
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const modalVideoRef = useRef<HTMLVideoElement>(null);
   const narrationAudioRefs = useRef(new Map<string, HTMLAudioElement>());
   const musicAudioRef = useRef<HTMLAudioElement>(null);
   const playheadRef = useRef(playheadSeconds);
   const [previewExpanded, setPreviewExpanded] = useState(false);
-  const clip =
-    timeline?.sceneClips.find(
+  const activeTransition = timeline?.transitions.find((transition) => {
+    if (transition.type === "none" || transition.durationSeconds <= 0)
+      return false;
+    const nextClip = timeline.sceneClips.find(
+      (candidate) => candidate.sceneId === transition.toSceneId,
+    );
+    return Boolean(
+      nextClip &&
+      playheadSeconds >= nextClip.startSeconds - transition.durationSeconds &&
+      playheadSeconds < nextClip.startSeconds,
+    );
+  });
+  const transitionProgress = activeTransition
+    ? (() => {
+        const nextClip = timeline?.sceneClips.find(
+          (candidate) => candidate.sceneId === activeTransition.toSceneId,
+        );
+        return nextClip
+          ? Math.max(
+              0,
+              Math.min(
+                1,
+                (playheadSeconds -
+                  (nextClip.startSeconds -
+                    activeTransition.durationSeconds)) /
+                  activeTransition.durationSeconds,
+              ),
+            )
+          : 0;
+      })()
+    : 0;
+  const easedTransitionProgress =
+    transitionProgress * transitionProgress * (3 - 2 * transitionProgress);
+  const activeClips =
+    timeline?.sceneClips.filter(
       (candidate) =>
         playheadSeconds >= candidate.startSeconds &&
         playheadSeconds < candidate.startSeconds + candidate.durationSeconds,
-    ) ?? timeline?.sceneClips.at(-1);
+    ) ?? [];
+  const clip = activeClips.at(-1) ?? timeline?.sceneClips.at(-1);
   const asset = project.assets.find(
     (candidate) => candidate.id === clip?.assetId,
   );
   const scene = project.scenes.find(
     (candidate) => candidate.id === clip?.sceneId,
   );
+  const transitionClips =
+    activeTransition && timeline
+      ? [
+          timeline.sceneClips.find(
+            (candidate) => candidate.sceneId === activeTransition.fromSceneId,
+          ),
+          timeline.sceneClips.find(
+            (candidate) => candidate.sceneId === activeTransition.toSceneId,
+          ),
+        ].filter(
+          (candidate): candidate is EditingTimeline["sceneClips"][number] =>
+            candidate !== undefined,
+        )
+      : [];
   const narrationAsset = project.assets.find(
     (candidate) => candidate.id === timeline?.narration?.assetId,
   );
@@ -657,10 +1260,7 @@ export function EditingPreview({
     () =>
       timeline?.narration
         ? narrationSourceRanges(timeline.narration)
-        : new Map<
-            string,
-            { startSeconds: number; durationSeconds: number }
-          >(),
+        : new Map<string, { startSeconds: number; durationSeconds: number }>(),
     [timeline],
   );
 
@@ -687,12 +1287,7 @@ export function EditingPreview({
     let frame = 0;
     let previous = performance.now();
     const advance = (now: number) => {
-      const video = videoRef.current;
-      const next =
-        video && asset?.kind === "video" && clip
-          ? clip.startSeconds +
-            Math.max(0, video.currentTime - clip.trimStartSeconds)
-          : playheadRef.current + (now - previous) / 1000;
+      const next = playheadRef.current + (now - previous) / 1000;
       previous = now;
       if (next >= duration) {
         playheadRef.current = 0;
@@ -706,53 +1301,7 @@ export function EditingPreview({
     };
     frame = requestAnimationFrame(advance);
     return () => cancelAnimationFrame(frame);
-  }, [asset?.kind, clip, duration, onPlayheadChange, onPlayingChange, playing]);
-
-  useEffect(() => {
-    if (!clip) return;
-    const expectedTime =
-      clip.trimStartSeconds + Math.max(0, playheadSeconds - clip.startSeconds);
-    for (const video of [videoRef.current, modalVideoRef.current]) {
-      if (
-        video &&
-        (!playing || Math.abs(video.currentTime - expectedTime) > 0.35)
-      ) {
-        video.currentTime = expectedTime;
-      }
-    }
-  }, [clip, playheadSeconds, playing, previewExpanded]);
-
-  useEffect(() => {
-    const videos = [videoRef.current, modalVideoRef.current].filter(
-      (video): video is HTMLVideoElement => video !== null,
-    );
-    if (videos.length === 0 || !clip || asset?.kind !== "video") return;
-    const synchronizers = videos.map((video) => {
-      const synchronizeAndPlay = () => {
-        const expectedTime =
-          clip.trimStartSeconds +
-          Math.max(0, playheadRef.current - clip.startSeconds);
-        if (Math.abs(video.currentTime - expectedTime) > 0.05) {
-          video.currentTime = expectedTime;
-        }
-        if (playing) void video.play().catch(() => undefined);
-        else video.pause();
-      };
-      if (video.readyState >= HTMLMediaElement.HAVE_METADATA)
-        synchronizeAndPlay();
-      else
-        video.addEventListener("loadedmetadata", synchronizeAndPlay, {
-          once: true,
-        });
-      return { video, synchronizeAndPlay };
-    });
-    return () => {
-      for (const { video, synchronizeAndPlay } of synchronizers) {
-        video.removeEventListener("loadedmetadata", synchronizeAndPlay);
-        video.pause();
-      }
-    };
-  }, [asset?.id, asset?.kind, clip, playing, previewExpanded]);
+  }, [duration, onPlayheadChange, onPlayingChange, playing]);
 
   useEffect(() => {
     const synchronizeAudio = (
@@ -767,13 +1316,15 @@ export function EditingPreview({
         playing &&
         playheadSeconds >= range.startSeconds &&
         playheadSeconds < range.endSeconds;
-      const expectedTime = sourceStartSeconds + Math.max(
-        0,
-        Math.min(
-          range.endSeconds - range.startSeconds,
-          playheadSeconds - range.startSeconds,
-        ),
-      );
+      const expectedTime =
+        sourceStartSeconds +
+        Math.max(
+          0,
+          Math.min(
+            range.endSeconds - range.startSeconds,
+            playheadSeconds - range.startSeconds,
+          ),
+        );
 
       if (audio.readyState >= HTMLMediaElement.HAVE_METADATA) {
         if (!playing || Math.abs(audio.currentTime - expectedTime) > 0.35) {
@@ -793,11 +1344,36 @@ export function EditingPreview({
       synchronizeAudio(
         narrationAudioRefs.current.get(segment.sceneId) ?? null,
         segment,
-        1,
+        timeline?.narration?.volume ?? 1,
         source?.startSeconds,
       );
     }
-    synchronizeAudio(musicAudioRef.current, timeline?.music, 0.3);
+    const music = timeline?.music;
+    const fadeInGain =
+      music && music.fadeInSeconds > 0
+        ? Math.min(
+            1,
+            Math.max(
+              0,
+              (playheadSeconds - music.startSeconds) / music.fadeInSeconds,
+            ),
+          )
+        : 1;
+    const fadeOutGain =
+      music && music.fadeOutSeconds > 0
+        ? Math.min(
+            1,
+            Math.max(
+              0,
+              (music.endSeconds - playheadSeconds) / music.fadeOutSeconds,
+            ),
+          )
+        : 1;
+    synchronizeAudio(
+      musicAudioRef.current,
+      music,
+      (music?.volume ?? 0.25) * Math.min(fadeInGain, fadeOutGain),
+    );
   }, [narrationSources, playheadSeconds, playing, timeline]);
 
   const updateOutput = (aspectRatio: string, width: number, height: number) => {
@@ -808,8 +1384,41 @@ export function EditingPreview({
     onProjectChange(next);
   };
 
+  const previewMedia = (sizes: string) => {
+    const clips = activeTransition ? transitionClips : clip ? [clip] : [];
+    return clips.map((candidate, index) => {
+      const candidateAsset = project.assets.find(
+        (item) => item.id === candidate.assetId,
+      );
+      if (!candidateAsset) return null;
+      const opacity = !activeTransition
+        ? 1
+        : activeTransition.type === "dissolve"
+          ? index === 0
+            ? 1 - easedTransitionProgress
+            : easedTransitionProgress
+          : index === 0
+            ? Math.max(0, 1 - easedTransitionProgress * 2)
+            : Math.max(0, easedTransitionProgress * 2 - 1);
+      return (
+        <PreviewMedia
+          key={`${sizes}-${candidate.sceneId}`}
+          projectId={project.project.id}
+          asset={candidateAsset}
+          clip={candidate}
+          playheadSeconds={playheadSeconds}
+          playing={playing && playheadSeconds >= candidate.startSeconds}
+          opacity={opacity}
+          sizes={sizes}
+        />
+      );
+    });
+  };
+
   const playbackControls = (modal = false) => (
-    <div className={`flex items-center gap-3 ${modal ? "w-full max-w-2xl" : "mt-3"}`}>
+    <div
+      className={`flex items-center gap-3 ${modal ? "w-full max-w-2xl" : "mt-3"}`}
+    >
       <button
         type="button"
         onClick={() => onPlayingChange(!playing)}
@@ -829,7 +1438,9 @@ export function EditingPreview({
         onChange={(event) => onPlayheadChange(Number(event.target.value))}
         className="min-w-0 flex-1 accent-violet-600"
       />
-      <span className={`text-[10px] font-bold ${modal ? "text-white" : "text-slate-300"}`}>
+      <span
+        className={`text-[10px] font-bold ${modal ? "text-white" : "text-slate-300"}`}
+      >
         {timeLabel(playheadSeconds)} / {timeLabel(duration)}
       </span>
     </div>
@@ -839,27 +1450,7 @@ export function EditingPreview({
     <div className="space-y-4">
       <div className="rounded-2xl bg-linear-to-br from-slate-950 to-slate-800 p-3">
         <div className="relative mx-auto aspect-9/16 max-h-72 overflow-hidden rounded-xl bg-black">
-          {asset?.kind === "image" && (
-            <Image
-              src={contentUrl(project.project.id, asset.relativePath)}
-              alt={`${scene?.order ?? ""}번 장면 미리보기`}
-              fill
-              unoptimized
-              sizes="180px"
-              className="object-cover"
-            />
-          )}
-          {asset?.kind === "video" && (
-            <video
-              key={asset.id}
-              ref={videoRef}
-              src={contentUrl(project.project.id, asset.relativePath)}
-              muted
-              playsInline
-              preload="auto"
-              className="h-full w-full object-cover"
-            />
-          )}
+          {previewMedia("180px")}
           {narrationAsset?.kind === "audio" &&
             timeline?.narration?.segments.map((segment) => (
               <audio
@@ -928,27 +1519,7 @@ export function EditingPreview({
               onClick={(event) => event.stopPropagation()}
             >
               <div className="relative min-h-0 flex-1 aspect-9/16 overflow-hidden rounded-2xl bg-black shadow-2xl">
-                {asset?.kind === "image" && (
-                  <Image
-                    src={contentUrl(project.project.id, asset.relativePath)}
-                    alt={`${scene?.order ?? ""}번 장면 확대 미리보기`}
-                    fill
-                    unoptimized
-                    sizes="50vw"
-                    className="object-cover"
-                  />
-                )}
-                {asset?.kind === "video" && (
-                  <video
-                    key={`expanded-${asset.id}`}
-                    ref={modalVideoRef}
-                    src={contentUrl(project.project.id, asset.relativePath)}
-                    muted
-                    playsInline
-                    preload="auto"
-                    className="h-full w-full object-cover"
-                  />
-                )}
+                {previewMedia("50vw")}
                 {!asset && (
                   <div className="flex h-full items-center justify-center px-6 text-center text-sm font-semibold text-slate-400">
                     재생 위치에 표시할 미디어가 없습니다.
@@ -963,6 +1534,11 @@ export function EditingPreview({
           </div>,
           document.body,
         )}
+      <EditingInspector
+        project={project}
+        selection={selection}
+        onProjectChange={onProjectChange}
+      />
       <div className="rounded-xl border border-slate-200 p-3">
         <p className="text-xs font-extrabold text-slate-800">출력 설정</p>
         <label className="mt-3 block text-[11px] font-bold text-slate-500">

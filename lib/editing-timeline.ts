@@ -1,9 +1,51 @@
-import type { EditingTimeline, ProjectDocument, VoiceTimestamp } from "./project-schema";
+import type {
+  EditingTimeline,
+  ImageMotion,
+  ImageMotionType,
+  ProjectDocument,
+  SceneTransitionType,
+  VoiceTimestamp,
+} from "./project-schema";
 
 const MIN_CLIP_SECONDS = 0.5;
 
 function rounded(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+function transitionMaximum(
+  previous: EditingTimeline["sceneClips"][number],
+  next: EditingTimeline["sceneClips"][number],
+): number {
+  return rounded(Math.max(0, Math.min(2, previous.durationSeconds - 0.1, next.durationSeconds - 0.1)));
+}
+
+function reflowSceneClips(timeline: EditingTimeline): void {
+  let start = 0;
+  timeline.sceneClips.forEach((clip, index) => {
+    clip.startSeconds = rounded(start);
+    const next = timeline.sceneClips[index + 1];
+    if (!next) return;
+    const transition = timeline.transitions[index];
+    if (transition) {
+      transition.durationSeconds = transition.type === "none"
+        ? 0
+        : Math.min(transition.durationSeconds, transitionMaximum(clip, next));
+    }
+    start += clip.durationSeconds;
+  });
+}
+
+function markOutputStale(project: ProjectDocument, reason: string): void {
+  project.output.status = project.output.assetId ? "확인 필요" : project.output.status;
+  project.output.stale = project.output.assetId ? { isStale: true, reason } : project.output.stale;
+}
+
+export function imageMotionPreset(type: ImageMotionType, clipDurationSeconds: number): ImageMotion {
+  const shared = { startSeconds: 0, durationSeconds: rounded(clipDurationSeconds) };
+  if (type === "zoom-out") return { type, start: { xPercent: 50, yPercent: 50, scale: 1.15 }, end: { xPercent: 50, yPercent: 50, scale: 1 }, ...shared };
+  if (type === "pan") return { type, start: { xPercent: 0, yPercent: 50, scale: 1.12 }, end: { xPercent: 100, yPercent: 50, scale: 1.12 }, ...shared };
+  return { type, start: { xPercent: 50, yPercent: 50, scale: 1 }, end: { xPercent: 50, yPercent: 50, scale: 1.15 }, ...shared };
 }
 
 function narrationWeight(text: string): number {
@@ -112,6 +154,7 @@ export function createEditingTimeline(project: ProjectDocument): EditingTimeline
         startSeconds: rounded(sceneStart),
         durationSeconds: rounded(durationSeconds),
         trimStartSeconds: scene.editing.trimStartSeconds,
+        imageMotion: null,
       };
       sceneStart += durationSeconds;
       return [clip];
@@ -125,16 +168,25 @@ export function createEditingTimeline(project: ProjectDocument): EditingTimeline
     startSeconds: 0,
     endSeconds: rounded(voiceDuration),
     alignment: voiceTimestamps.length > 0 ? "provider-timestamps" as const : "estimated" as const,
+    volume: 1,
     segments: narrationSegments(project, voiceDuration, voiceTimestamps),
   } : null;
 
   const musicAsset = project.assets.find((asset) => asset.id === project.music.selectedAssetId && asset.role === "background-music");
   const musicDuration = musicAsset?.metadata.durationSeconds ?? sceneStart;
+  const transitions = sceneClips.slice(1).map((clip, index) => ({
+    id: `transition-${clip.sceneId}`,
+    fromSceneId: sceneClips[index].sceneId,
+    toSceneId: clip.sceneId,
+    type: "none" as const,
+    durationSeconds: 0,
+  }));
   return {
     sceneClips,
+    transitions,
     narration,
     music: musicAsset && musicDuration > 0
-      ? { assetId: musicAsset.id, startSeconds: 0, endSeconds: rounded(Math.min(musicDuration, sceneStart || musicDuration)) }
+      ? { assetId: musicAsset.id, startSeconds: 0, endSeconds: rounded(Math.min(musicDuration, sceneStart || musicDuration)), volume: 0.25, fadeInSeconds: 0, fadeOutSeconds: 0 }
       : null,
   };
 }
@@ -164,11 +216,23 @@ export function validateEditingTimeline(
   }
   for (const clip of timeline.sceneClips) {
     if (clip.startSeconds < 0 || clip.durationSeconds < MIN_CLIP_SECONDS) errors.push(`${clip.sceneId} 장면의 시간 범위가 올바르지 않습니다.`);
+    if (clip.imageMotion && clip.mediaType !== "image") errors.push(`${clip.sceneId} 영상 장면에는 정지 이미지 효과를 적용할 수 없습니다.`);
+    if (clip.imageMotion && clip.imageMotion.startSeconds + clip.imageMotion.durationSeconds > clip.durationSeconds + 0.001) errors.push(`${clip.sceneId} 이미지 효과 시간이 장면 길이를 벗어났습니다.`);
+  }
+  for (const transition of timeline.transitions) {
+    const previous = clipsByScene.get(transition.fromSceneId);
+    const next = clipsByScene.get(transition.toSceneId);
+    if (!previous || !next) {
+      errors.push(`${transition.id} 전환의 장면 참조가 올바르지 않습니다.`);
+      continue;
+    }
+    if (transition.durationSeconds > transitionMaximum(previous, next) + 0.001) errors.push(`${transition.id} 전환 시간이 인접 장면보다 깁니다.`);
   }
   if (timeline.narration) {
     if (availableAssetIds && !availableAssetIds.has(timeline.narration.assetId)) errors.push("선택한 전체 더빙 파일이 누락되었습니다.");
     const placementEnd = Math.max(
       timeline.narration.endSeconds,
+      ...timeline.narration.segments.map((segment) => segment.endSeconds),
       ...timeline.sceneClips.map(
         (clip) => clip.startSeconds + clip.durationSeconds,
       ),
@@ -177,7 +241,11 @@ export function validateEditingTimeline(
       if (segment.startSeconds < 0 || segment.endSeconds > placementEnd || segment.endSeconds <= segment.startSeconds) errors.push(`${segment.sceneId} 내레이션 구간이 타임라인 범위를 벗어났습니다.`);
     }
   }
-  if (timeline.music && availableAssetIds && !availableAssetIds.has(timeline.music.assetId)) errors.push("선택한 배경음악 파일이 누락되었습니다.");
+  if (timeline.music) {
+    if (availableAssetIds && !availableAssetIds.has(timeline.music.assetId)) errors.push("선택한 배경음악 파일이 누락되었습니다.");
+    const musicDuration = timeline.music.endSeconds - timeline.music.startSeconds;
+    if (timeline.music.fadeInSeconds > musicDuration || timeline.music.fadeOutSeconds > musicDuration) errors.push("배경음악 페이드 시간이 음악 길이를 벗어났습니다.");
+  }
   return errors;
 }
 
@@ -185,7 +253,8 @@ export function resizeSceneClip(project: ProjectDocument, sceneId: string, durat
   const next = structuredClone(project);
   const timeline = next.editing.timeline;
   if (!timeline) return next;
-  const ordered = [...timeline.sceneClips].sort((left, right) => left.startSeconds - right.startSeconds);
+  const sceneOrder = new Map(next.scenes.map((scene) => [scene.id, scene.order]));
+  const ordered = [...timeline.sceneClips].sort((left, right) => (sceneOrder.get(left.sceneId) ?? 0) - (sceneOrder.get(right.sceneId) ?? 0));
   const clip = ordered.find((candidate) => candidate.sceneId === sceneId);
   if (!clip) return next;
   const asset = next.assets.find((candidate) => candidate.id === clip.assetId);
@@ -193,10 +262,13 @@ export function resizeSceneClip(project: ProjectDocument, sceneId: string, durat
     ? asset.metadata.durationSeconds - clip.trimStartSeconds
     : Number.POSITIVE_INFINITY;
   clip.durationSeconds = rounded(Math.max(MIN_CLIP_SECONDS, Math.min(durationSeconds, maximum)));
-  let start = 0;
+  if (clip.imageMotion) {
+    clip.imageMotion.startSeconds = Math.min(clip.imageMotion.startSeconds, Math.max(0, clip.durationSeconds - 0.1));
+    clip.imageMotion.durationSeconds = rounded(Math.min(clip.imageMotion.durationSeconds, clip.durationSeconds - clip.imageMotion.startSeconds));
+  }
+  timeline.sceneClips = ordered;
+  reflowSceneClips(timeline);
   for (const candidate of ordered) {
-    candidate.startSeconds = rounded(start);
-    start += candidate.durationSeconds;
     const scene = next.scenes.find((item) => item.id === candidate.sceneId);
     if (scene) {
       scene.startSeconds = candidate.startSeconds;
@@ -204,11 +276,49 @@ export function resizeSceneClip(project: ProjectDocument, sceneId: string, durat
       scene.editing.durationSeconds = candidate.durationSeconds;
     }
   }
-  timeline.sceneClips = ordered;
-  next.project.settings.targetDurationSeconds = rounded(start);
-  next.script.targetDurationSeconds = rounded(start);
-  next.output.status = next.output.assetId ? "확인 필요" : next.output.status;
-  next.output.stale = next.output.assetId ? { isStale: true, reason: "타임라인 장면 길이 변경" } : next.output.stale;
+  const visualDuration = Math.max(0, ...ordered.map((candidate) => candidate.startSeconds + candidate.durationSeconds));
+  next.project.settings.targetDurationSeconds = rounded(visualDuration);
+  next.script.targetDurationSeconds = rounded(visualDuration);
+  markOutputStale(next, "타임라인 장면 길이 변경");
+  return next;
+}
+
+export function updateSceneTransition(
+  project: ProjectDocument,
+  transitionId: string,
+  type: SceneTransitionType,
+  durationSeconds: number,
+): ProjectDocument {
+  const next = structuredClone(project);
+  const timeline = next.editing.timeline;
+  const transition = timeline?.transitions.find((candidate) => candidate.id === transitionId);
+  if (!timeline || !transition) return next;
+  const previous = timeline.sceneClips.find((clip) => clip.sceneId === transition.fromSceneId);
+  const following = timeline.sceneClips.find((clip) => clip.sceneId === transition.toSceneId);
+  if (!previous || !following) return next;
+  transition.type = type;
+  transition.durationSeconds = type === "none"
+    ? 0
+    : rounded(Math.max(0.1, Math.min(durationSeconds, transitionMaximum(previous, following))));
+  reflowSceneClips(timeline);
+  for (const clip of timeline.sceneClips) {
+    const scene = next.scenes.find((candidate) => candidate.id === clip.sceneId);
+    if (scene) scene.startSeconds = clip.startSeconds;
+  }
+  markOutputStale(next, "장면 전환 변경");
+  return next;
+}
+
+export function updateImageMotion(
+  project: ProjectDocument,
+  sceneId: string,
+  imageMotion: ImageMotion | null,
+): ProjectDocument {
+  const next = structuredClone(project);
+  const clip = next.editing.timeline?.sceneClips.find((candidate) => candidate.sceneId === sceneId);
+  if (!clip || clip.mediaType !== "image") return next;
+  clip.imageMotion = imageMotion;
+  markOutputStale(next, "정지 이미지 효과 변경");
   return next;
 }
 
@@ -231,7 +341,6 @@ export function moveNarrationSegment(project: ProjectDocument, sceneId: string, 
   );
   segment.startSeconds = rounded(clampedStart);
   segment.endSeconds = rounded(clampedStart + duration);
-  next.output.status = next.output.assetId ? "확인 필요" : next.output.status;
-  next.output.stale = next.output.assetId ? { isStale: true, reason: "내레이션 구간 이동" } : next.output.stale;
+  markOutputStale(next, "내레이션 구간 이동");
   return next;
 }

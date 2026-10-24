@@ -13,7 +13,7 @@ import { Icon, type DashboardFile, type PanelContext } from "./shorts-dashboard-
 import { DetailPanel, SceneTable } from "./shorts-dashboard-detail";
 import { SidebarContent } from "./shorts-dashboard-sidebar";
 import { WorkflowEditor } from "./shorts-dashboard-workflow";
-import { TimelineEditor } from "./shorts-dashboard-timeline";
+import { TimelineEditor, type TimelineSelection } from "./shorts-dashboard-timeline";
 
 export interface DashboardViewProps {
   project: ProjectDocument;
@@ -92,6 +92,7 @@ export function DashboardView({
   const [panelContext, setPanelContext] = useState<PanelContext>("file");
   const [playheadSeconds, setPlayheadSeconds] = useState(0);
   const [timelinePlaying, setTimelinePlaying] = useState(false);
+  const [timelineSelection, setTimelineSelection] = useState<TimelineSelection | null>(null);
 
   const selectedStep =
     project.workflow.steps.find((step) => step.id === selectedStepId) ??
@@ -399,6 +400,7 @@ export function DashboardView({
                   setPanelContext("step");
                   setTimelinePlaying(false);
                   setPlayheadSeconds(0);
+                  setTimelineSelection(null);
                   if (stepId === "editing" && !project.editing.timeline) {
                     const next = structuredClone(project);
                     next.editing.timeline = createEditingTimeline(next);
@@ -438,6 +440,7 @@ export function DashboardView({
                 configuredMusicModel={configuredMusicModel}
                 playheadSeconds={playheadSeconds}
                 timelinePlaying={timelinePlaying}
+                timelineSelection={timelineSelection}
                 onTimelinePlayingChange={setTimelinePlaying}
                 onPlayheadChange={setPlayheadSeconds}
               />
@@ -448,6 +451,8 @@ export function DashboardView({
               project={project}
               files={files}
               playheadSeconds={playheadSeconds}
+              selection={timelineSelection}
+              onSelectionChange={setTimelineSelection}
               onPlayheadChange={setPlayheadSeconds}
               onProjectChange={onProjectChange}
             /> : <SceneTable

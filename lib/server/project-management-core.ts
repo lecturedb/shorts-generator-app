@@ -71,7 +71,7 @@ export async function createProject(nameInput: unknown, options: ProjectStorageO
   const name = projectName(nameInput);
   const now = new Date().toISOString();
   const project: ProjectDocument = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     project: {
       id: `project-${randomUUID()}`,
       name,
@@ -93,7 +93,7 @@ export async function createProject(nameInput: unknown, options: ProjectStorageO
       status: "대기",
       assetId: null,
       stale: { isStale: false },
-      settings: { aspectRatio: "9:16", width: 1080, height: 1920, narrationVolume: 1, musicVolume: 0.25 },
+      settings: { aspectRatio: "9:16", width: 1080, height: 1920 },
     },
   };
   return saveProjectDocument(project, options);

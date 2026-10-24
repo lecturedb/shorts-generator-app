@@ -1,4 +1,5 @@
-export const PROJECT_SCHEMA_VERSION = 2 as const;
+export const PROJECT_SCHEMA_VERSION = 3 as const;
+export const PREVIOUS_PROJECT_SCHEMA_VERSION = 2 as const;
 export const LEGACY_PROJECT_SCHEMA_VERSION = 1 as const;
 
 export const workflowStatuses = ["대기", "실행 중", "완료", "실패", "취소됨", "확인 필요"] as const;
@@ -26,6 +27,16 @@ export interface VoiceTimestamp {
 }
 
 export type NarrationAlignment = "provider-timestamps" | "estimated";
+export type SceneTransitionType = "none" | "dissolve" | "fade";
+export type ImageMotionType = "zoom-in" | "zoom-out" | "pan";
+
+export interface ImageMotion {
+  type: ImageMotionType;
+  start: { xPercent: number; yPercent: number; scale: number };
+  end: { xPercent: number; yPercent: number; scale: number };
+  startSeconds: number;
+  durationSeconds: number;
+}
 
 export interface EditingTimeline {
   sceneClips: Array<{
@@ -35,12 +46,21 @@ export interface EditingTimeline {
     startSeconds: number;
     durationSeconds: number;
     trimStartSeconds: number;
+    imageMotion: ImageMotion | null;
+  }>;
+  transitions: Array<{
+    id: string;
+    fromSceneId: string;
+    toSceneId: string;
+    type: SceneTransitionType;
+    durationSeconds: number;
   }>;
   narration: {
     assetId: string;
     startSeconds: number;
     endSeconds: number;
     alignment: NarrationAlignment;
+    volume: number;
     segments: Array<{
       sceneId: string;
       startSeconds: number;
@@ -51,6 +71,9 @@ export interface EditingTimeline {
     assetId: string;
     startSeconds: number;
     endSeconds: number;
+    volume: number;
+    fadeInSeconds: number;
+    fadeOutSeconds: number;
   } | null;
 }
 
@@ -192,8 +215,6 @@ export interface ProjectDocument {
       aspectRatio: string;
       width: number;
       height: number;
-      narrationVolume: number;
-      musicVolume: number;
     };
   };
 }
@@ -206,6 +227,8 @@ const assetKindSet = new Set<string>(["image", "video", "audio"] satisfies Asset
 const assetRoleSet = new Set<string>(["scene-image", "scene-video", "narration", "background-music", "final-output"] satisfies AssetRole[]);
 const sceneGenerationStatusSet = new Set<string>(sceneGenerationStatuses);
 const sceneVideoModeSet = new Set<string>(["start_only", "start_end"] satisfies SceneVideoMode[]);
+const sceneTransitionTypeSet = new Set<string>(["none", "dissolve", "fade"] satisfies SceneTransitionType[]);
+const imageMotionTypeSet = new Set<string>(["zoom-in", "zoom-out", "pan"] satisfies ImageMotionType[]);
 
 function fail(path: string, message: string): never {
   throw new ProjectValidationError(path, message);
@@ -249,6 +272,12 @@ function nullableStringAt(value: unknown, path: string, allowEmpty = false): str
 function numberAt(value: unknown, path: string, minimum = 0): number {
   if (typeof value !== "number" || !Number.isFinite(value) || value < minimum) fail(path, `${minimum} 이상의 유한한 숫자여야 합니다.`);
   return value;
+}
+
+function boundedNumberAt(value: unknown, path: string, minimum: number, maximum: number): number {
+  const parsed = numberAt(value, path, minimum);
+  if (parsed > maximum) fail(path, `${minimum}~${maximum} 범위여야 합니다.`);
+  return parsed;
 }
 
 function integerAt(value: unknown, path: string, minimum = 0): number {
@@ -394,7 +423,7 @@ function migrateLegacyProject(root: Record<string, unknown>): Record<string, unk
   const selectedMusic = assets.find((asset) => asset.role === "background-music" && asset.selected === true);
   return {
     ...root,
-    schemaVersion: PROJECT_SCHEMA_VERSION,
+    schemaVersion: PREVIOUS_PROJECT_SCHEMA_VERSION,
     project: { ...project, settings: { ...projectSettings, fps: 30 } },
     script: {
       provider: null,
@@ -431,10 +460,56 @@ function migrateLegacyProject(root: Record<string, unknown>): Record<string, unk
   };
 }
 
+function migratePreviousProject(root: Record<string, unknown>): Record<string, unknown> {
+  const output = objectAt(root.output, "output");
+  const outputSettings = objectAt(output.settings, "output.settings");
+  const editing = objectAt(root.editing, "editing");
+  const rawTimeline = editing.timeline;
+  if (rawTimeline === undefined || rawTimeline === null) {
+    return { ...root, schemaVersion: PROJECT_SCHEMA_VERSION };
+  }
+
+  const timeline = objectAt(rawTimeline, "editing.timeline");
+  const sceneClips: Record<string, unknown>[] = arrayAt(timeline.sceneClips, "editing.timeline.sceneClips").map((value, index) => {
+    const clip = objectAt(value, `editing.timeline.sceneClips[${index}]`);
+    return { ...clip, imageMotion: null };
+  });
+  const orderedClips = [...sceneClips].sort((left, right) => {
+    const leftStart = typeof left.startSeconds === "number" ? left.startSeconds : 0;
+    const rightStart = typeof right.startSeconds === "number" ? right.startSeconds : 0;
+    return leftStart - rightStart;
+  });
+  const transitions = orderedClips.slice(1).map((clip, index) => ({
+    id: `transition-${String(clip.sceneId)}`,
+    fromSceneId: orderedClips[index].sceneId,
+    toSceneId: clip.sceneId,
+    type: "none",
+    durationSeconds: 0,
+  }));
+  const narration = timeline.narration === null
+    ? null
+    : { ...objectAt(timeline.narration, "editing.timeline.narration"), volume: typeof outputSettings.narrationVolume === "number" ? outputSettings.narrationVolume : 1 };
+  const music = timeline.music === null
+    ? null
+    : {
+        ...objectAt(timeline.music, "editing.timeline.music"),
+        volume: typeof outputSettings.musicVolume === "number" ? outputSettings.musicVolume : 0.25,
+        fadeInSeconds: 0,
+        fadeOutSeconds: 0,
+      };
+
+  return {
+    ...root,
+    schemaVersion: PROJECT_SCHEMA_VERSION,
+    editing: { ...editing, timeline: { ...timeline, sceneClips, transitions, narration, music } },
+  };
+}
+
 export function parseProjectDocument(input: unknown): ProjectDocument {
   const sourceRoot = objectAt(input, "project.json");
-  const root = sourceRoot.schemaVersion === LEGACY_PROJECT_SCHEMA_VERSION ? migrateLegacyProject(sourceRoot) : sourceRoot;
-  if (root.schemaVersion !== PROJECT_SCHEMA_VERSION) fail("schemaVersion", `지원 버전 ${LEGACY_PROJECT_SCHEMA_VERSION} 또는 ${PROJECT_SCHEMA_VERSION}이어야 합니다.`);
+  const previousRoot = sourceRoot.schemaVersion === LEGACY_PROJECT_SCHEMA_VERSION ? migrateLegacyProject(sourceRoot) : sourceRoot;
+  const root = previousRoot.schemaVersion === PREVIOUS_PROJECT_SCHEMA_VERSION ? migratePreviousProject(previousRoot) : previousRoot;
+  if (root.schemaVersion !== PROJECT_SCHEMA_VERSION) fail("schemaVersion", `지원 버전 ${LEGACY_PROJECT_SCHEMA_VERSION}~${PROJECT_SCHEMA_VERSION}이어야 합니다.`);
 
   const projectValue = objectAt(root.project, "project");
   const project = {
@@ -639,6 +714,29 @@ export function parseProjectDocument(input: unknown): ProjectDocument {
           const clip = objectAt(value, path);
           const mediaType = stringAt(clip.mediaType, `${path}.mediaType`);
           if (mediaType !== "image" && mediaType !== "video") fail(`${path}.mediaType`, "image 또는 video여야 합니다.");
+          const imageMotion = clip.imageMotion === null ? null : (() => {
+            const motion = objectAt(clip.imageMotion, `${path}.imageMotion`);
+            const type = stringAt(motion.type, `${path}.imageMotion.type`);
+            if (!imageMotionTypeSet.has(type)) fail(`${path}.imageMotion.type`, `지원하지 않는 이미지 효과 '${type}'입니다.`);
+            const start = objectAt(motion.start, `${path}.imageMotion.start`);
+            const end = objectAt(motion.end, `${path}.imageMotion.end`);
+            return {
+              type: type as ImageMotionType,
+              start: {
+                xPercent: boundedNumberAt(start.xPercent, `${path}.imageMotion.start.xPercent`, 0, 100),
+                yPercent: boundedNumberAt(start.yPercent, `${path}.imageMotion.start.yPercent`, 0, 100),
+                scale: boundedNumberAt(start.scale, `${path}.imageMotion.start.scale`, 1, 3),
+              },
+              end: {
+                xPercent: boundedNumberAt(end.xPercent, `${path}.imageMotion.end.xPercent`, 0, 100),
+                yPercent: boundedNumberAt(end.yPercent, `${path}.imageMotion.end.yPercent`, 0, 100),
+                scale: boundedNumberAt(end.scale, `${path}.imageMotion.end.scale`, 1, 3),
+              },
+              startSeconds: numberAt(motion.startSeconds, `${path}.imageMotion.startSeconds`),
+              durationSeconds: numberAt(motion.durationSeconds, `${path}.imageMotion.durationSeconds`, 0.1),
+            };
+          })();
+          if (mediaType === "video" && imageMotion !== null) fail(`${path}.imageMotion`, "정지 이미지 장면에만 효과를 적용할 수 있습니다.");
           return {
             sceneId: idAt(clip.sceneId, `${path}.sceneId`),
             assetId: idAt(clip.assetId, `${path}.assetId`),
@@ -646,6 +744,23 @@ export function parseProjectDocument(input: unknown): ProjectDocument {
             startSeconds: numberAt(clip.startSeconds, `${path}.startSeconds`),
             durationSeconds: numberAt(clip.durationSeconds, `${path}.durationSeconds`, 0.1),
             trimStartSeconds: numberAt(clip.trimStartSeconds, `${path}.trimStartSeconds`),
+            imageMotion,
+          };
+        });
+        const transitions = arrayAt(timelineValue.transitions, "editing.timeline.transitions").map((value, index) => {
+          const path = `editing.timeline.transitions[${index}]`;
+          const transition = objectAt(value, path);
+          const type = stringAt(transition.type, `${path}.type`);
+          if (!sceneTransitionTypeSet.has(type)) fail(`${path}.type`, `지원하지 않는 전환 '${type}'입니다.`);
+          const durationSeconds = numberAt(transition.durationSeconds, `${path}.durationSeconds`);
+          if (type === "none" && durationSeconds !== 0) fail(`${path}.durationSeconds`, "전환 없음은 적용 시간이 0초여야 합니다.");
+          if (type !== "none" && durationSeconds <= 0) fail(`${path}.durationSeconds`, "전환 효과에는 0초보다 긴 적용 시간이 필요합니다.");
+          return {
+            id: idAt(transition.id, `${path}.id`),
+            fromSceneId: idAt(transition.fromSceneId, `${path}.fromSceneId`),
+            toSceneId: idAt(transition.toSceneId, `${path}.toSceneId`),
+            type: type as SceneTransitionType,
+            durationSeconds,
           };
         });
         const narration = timelineValue.narration === null ? null : (() => {
@@ -660,6 +775,7 @@ export function parseProjectDocument(input: unknown): ProjectDocument {
             startSeconds,
             endSeconds,
             alignment: alignment as NarrationAlignment,
+            volume: boundedNumberAt(narrationValue.volume, "editing.timeline.narration.volume", 0, 1),
             segments: arrayAt(narrationValue.segments, "editing.timeline.narration.segments").map((value, index) => {
               const path = `editing.timeline.narration.segments[${index}]`;
               const segment = objectAt(value, path);
@@ -675,9 +791,16 @@ export function parseProjectDocument(input: unknown): ProjectDocument {
           const startSeconds = numberAt(musicValue.startSeconds, "editing.timeline.music.startSeconds");
           const endSeconds = numberAt(musicValue.endSeconds, "editing.timeline.music.endSeconds");
           if (endSeconds <= startSeconds) fail("editing.timeline.music.endSeconds", "시작 시간보다 커야 합니다.");
-          return { assetId: idAt(musicValue.assetId, "editing.timeline.music.assetId"), startSeconds, endSeconds };
+          return {
+            assetId: idAt(musicValue.assetId, "editing.timeline.music.assetId"),
+            startSeconds,
+            endSeconds,
+            volume: boundedNumberAt(musicValue.volume, "editing.timeline.music.volume", 0, 1),
+            fadeInSeconds: numberAt(musicValue.fadeInSeconds, "editing.timeline.music.fadeInSeconds"),
+            fadeOutSeconds: numberAt(musicValue.fadeOutSeconds, "editing.timeline.music.fadeOutSeconds"),
+          };
         })();
-        return { sceneClips, narration, music };
+        return { sceneClips, transitions, narration, music };
       })();
   const editing = {
     status: sceneGenerationStatusAt(editingValue.status, "editing.status"),
@@ -695,8 +818,6 @@ export function parseProjectDocument(input: unknown): ProjectDocument {
       aspectRatio: stringAt(outputSettings.aspectRatio, "output.settings.aspectRatio"),
       width: integerAt(outputSettings.width, "output.settings.width", 1),
       height: integerAt(outputSettings.height, "output.settings.height", 1),
-      narrationVolume: numberAt(outputSettings.narrationVolume, "output.settings.narrationVolume", 0),
-      musicVolume: numberAt(outputSettings.musicVolume, "output.settings.musicVolume", 0),
     },
   };
   if (!new Set(["9:16", "1:1"]).has(output.settings.aspectRatio)) fail("output.settings.aspectRatio", "9:16 또는 1:1이어야 합니다.");
@@ -762,11 +883,35 @@ export function parseProjectDocument(input: unknown): ProjectDocument {
       const asset = assets.find((candidate) => candidate.id === clip.assetId);
       if (asset?.sceneId !== clip.sceneId || asset.kind !== clip.mediaType) fail(`editing.timeline.sceneClips[${index}].assetId`, "장면과 미디어 종류가 일치하는 대표 자산이어야 합니다.");
       if (clip.mediaType === "video" && asset.metadata.durationSeconds !== undefined && clip.trimStartSeconds + clip.durationSeconds > asset.metadata.durationSeconds + 0.001) fail(`editing.timeline.sceneClips[${index}].durationSeconds`, "영상의 실제 길이를 초과할 수 없습니다.");
+      if (clip.imageMotion && clip.imageMotion.startSeconds + clip.imageMotion.durationSeconds > clip.durationSeconds + 0.001) fail(`editing.timeline.sceneClips[${index}].imageMotion`, "이미지 효과 적용 시간이 장면 길이를 초과할 수 없습니다.");
     });
-    const orderedClips = [...editing.timeline.sceneClips].sort((left, right) => left.startSeconds - right.startSeconds);
-    orderedClips.forEach((clip, index) => {
-      const previous = orderedClips[index - 1];
-      if (previous && clip.startSeconds < previous.startSeconds + previous.durationSeconds - 0.001) fail(`editing.timeline.sceneClips[${index}].startSeconds`, "장면 클립 시간은 겹칠 수 없습니다.");
+    uniqueIds(editing.timeline.transitions, "editing.timeline.transitions");
+    const sceneOrder = new Map(scenes.map((scene) => [scene.id, scene.order]));
+    const orderedClips = [...editing.timeline.sceneClips].sort((left, right) => (sceneOrder.get(left.sceneId) ?? 0) - (sceneOrder.get(right.sceneId) ?? 0));
+    if (editing.timeline.transitions.length !== Math.max(0, orderedClips.length - 1)) fail("editing.timeline.transitions", "인접한 장면 사이마다 전환 정보가 하나씩 필요합니다.");
+    orderedClips.slice(1).forEach((clip, index) => {
+      const previous = orderedClips[index];
+      const transition = editing.timeline?.transitions[index];
+      if (!transition || transition.fromSceneId !== previous.sceneId || transition.toSceneId !== clip.sceneId) fail(`editing.timeline.transitions[${index}]`, "장면 순서와 일치하는 인접 전환이어야 합니다.");
+      requireScene(transition.fromSceneId, `editing.timeline.transitions[${index}].fromSceneId`);
+      requireScene(transition.toSceneId, `editing.timeline.transitions[${index}].toSceneId`);
+      const maximumDuration = Math.max(0, Math.min(previous.durationSeconds, clip.durationSeconds) - 0.1);
+      if (transition.durationSeconds > maximumDuration + 0.001) fail(`editing.timeline.transitions[${index}].durationSeconds`, "전환 시간이 인접 장면 길이에 비해 너무 깁니다.");
+      const expectedStart = previous.startSeconds + previous.durationSeconds;
+      const legacyOverlapStart = expectedStart - transition.durationSeconds;
+      if (
+        Math.abs(clip.startSeconds - expectedStart) > 0.011 &&
+        Math.abs(clip.startSeconds - legacyOverlapStart) > 0.011
+      ) {
+        fail(`editing.timeline.sceneClips[${index + 1}].startSeconds`, "인접 장면의 종료 위치와 일치해야 합니다.");
+      }
+    });
+    let visualStart = 0;
+    orderedClips.forEach((clip) => {
+      clip.startSeconds = Math.round(visualStart * 100) / 100;
+      const scene = scenes.find((candidate) => candidate.id === clip.sceneId);
+      if (scene) scene.startSeconds = clip.startSeconds;
+      visualStart += clip.durationSeconds;
     });
     if (editing.timeline.narration) {
       requireAssets([editing.timeline.narration.assetId], "editing.timeline.narration.assetId");
@@ -774,6 +919,7 @@ export function parseProjectDocument(input: unknown): ProjectDocument {
       if (asset?.role !== "narration") fail("editing.timeline.narration.assetId", "선택한 전체 더빙 자산이어야 합니다.");
       const placementEnd = Math.max(
         editing.timeline.narration.endSeconds,
+        ...editing.timeline.narration.segments.map((segment) => segment.endSeconds),
         ...editing.timeline.sceneClips.map(
           (clip) => clip.startSeconds + clip.durationSeconds,
         ),
@@ -787,6 +933,8 @@ export function parseProjectDocument(input: unknown): ProjectDocument {
       requireAssets([editing.timeline.music.assetId], "editing.timeline.music.assetId");
       const asset = assets.find((candidate) => candidate.id === editing.timeline?.music?.assetId);
       if (asset?.role !== "background-music") fail("editing.timeline.music.assetId", "선택한 배경음악 자산이어야 합니다.");
+      const musicDuration = editing.timeline.music.endSeconds - editing.timeline.music.startSeconds;
+      if (editing.timeline.music.fadeInSeconds > musicDuration || editing.timeline.music.fadeOutSeconds > musicDuration) fail("editing.timeline.music", "음악 페이드 시간은 배경음악 배치 길이를 초과할 수 없습니다.");
     }
   }
 

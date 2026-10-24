@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "project": {
     "id": "sample-space-project",
     "name": "우주에서는 폭발음이 들릴까?",
@@ -559,9 +559,7 @@
     "settings": {
       "aspectRatio": "9:16",
       "width": 1080,
-      "height": 1920,
-      "narrationVolume": 1,
-      "musicVolume": 0.25
+      "height": 1920
     }
   }
 }
