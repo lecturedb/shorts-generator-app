@@ -25,6 +25,7 @@ export interface DashboardViewProps {
   error: string | null;
   onSearchChange: (value: string) => void;
   onCreate: () => void;
+  onTemplates: () => void;
   onProjectSelect: (projectId: string) => void;
   onRename: () => void;
   onSave: () => void;
@@ -60,6 +61,7 @@ export function DashboardView({
   error,
   onSearchChange,
   onCreate,
+  onTemplates,
   onProjectSelect,
   onRename,
   onSave,
@@ -201,6 +203,7 @@ export function DashboardView({
               searchQuery={searchQuery}
               onSearchChange={onSearchChange}
               onCreate={onCreate}
+              onTemplates={onTemplates}
               onProjectSelect={selectProject}
               onCollapse={() => setSidebarCollapsed((value) => !value)}
               onFileSelect={selectFile}
@@ -240,6 +243,7 @@ export function DashboardView({
                 searchQuery={searchQuery}
                 onSearchChange={onSearchChange}
                 onCreate={onCreate}
+                onTemplates={onTemplates}
                 onProjectSelect={selectProject}
                 onCollapse={() => setMobileSidebarOpen(false)}
                 onFileSelect={selectFile}
@@ -400,7 +404,7 @@ export function DashboardView({
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   <span className="rounded-full bg-violet-50 px-3 py-1.5 text-xs font-bold text-violet-700">
-                    고정 6단계
+                    연결선으로 단계 선택
                   </span>
                   <span className="hidden rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600 sm:inline">
                     UI 편집 전용
@@ -416,6 +420,7 @@ export function DashboardView({
                 configuredVideoModel={configuredVideoModel}
                 configuredVoiceModel={configuredVoiceModel}
                 configuredMusicModel={configuredMusicModel}
+                onProjectChange={onProjectChange}
                 selectedStepId={
                   panelContext === "step" ? selectedStep.id : null
                 }

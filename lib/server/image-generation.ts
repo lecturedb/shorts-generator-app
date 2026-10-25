@@ -7,6 +7,7 @@ import path from "node:path";
 import type { ImageConfigurationAction, ImageGenerationRunResult } from "../image-generation-types";
 import { applyImageConfiguration } from "../image-generation-project";
 import type { ProjectDocument, WorkflowStatus } from "../project-schema";
+import { applyVideoDefaults, assertWorkflowStepIncluded } from "../workflow-configuration";
 import { generateImageWithFal } from "./fal-image-generation";
 import { listProjects } from "./project-management";
 import {
@@ -96,6 +97,7 @@ export async function startImageGeneration(
   const runId = runIdFor(requestId);
   const key = runKey(projectId, runId);
   const project = await loadProjectDocument(projectId);
+  assertWorkflowStepIncluded(project, "image");
   const sceneIds = requestedSceneIds(project, sceneIdsInput);
   const existing = project.runs.find((run) => run.id === runId);
   if (existing) return { runId, status: existing.status, project, created: false };
@@ -187,6 +189,7 @@ export async function performImageGeneration(projectId: string, runId: string, s
         });
         latestScene.assetIds.push(assetId);
         if (firstCandidate) latestScene.selectedImageAssetId = assetId;
+        applyVideoDefaults(project);
         latestScene.image.endpoint = generated.model;
         latestScene.image.input = {
           prompt,

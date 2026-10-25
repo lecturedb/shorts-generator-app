@@ -5,6 +5,7 @@ import { open, rename, rm } from "node:fs/promises";
 import path from "node:path";
 
 import type { ProjectDocument, WorkflowStatus } from "../project-schema";
+import { assertWorkflowStepIncluded } from "../workflow-configuration";
 import { applyVoiceConfiguration } from "../voice-generation-project";
 import type { VoiceConfigurationAction, VoiceGenerationRunResult } from "../voice-generation-types";
 import { parseVoiceGenerationInput, voiceInputSettings } from "../voice-generation-validation";
@@ -77,6 +78,7 @@ export async function startVoiceGeneration(
   const runId = runIdFor(requestId);
   const key = runKey(projectId, runId);
   const project = await loadProjectDocument(projectId);
+  assertWorkflowStepIncluded(project, "voice");
   let input;
   try {
     input = parseVoiceGenerationInput(rawInput);

@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import type { ProjectDocument } from "@/lib/project-schema";
 import { WorkflowCards } from "./shorts-dashboard-workflow-cards";
-import { allowedWorkflowTargets, createInitialWorkflowConnections, createInitialWorkflowPositions, workflowColumnCount, workflowMetrics, type WorkflowConnection, type WorkflowPosition, type WorkflowSize, type WorkflowStep } from "./shorts-dashboard-shared";
+import { allowedWorkflowTargets, createInitialWorkflowConnections, createInitialWorkflowPositions, includedWorkflowStepIds, workflowColumnCount, workflowMetrics, type WorkflowConnection, type WorkflowPosition, type WorkflowSize, type WorkflowStep } from "./shorts-dashboard-shared";
 export function WorkflowEditor({
   project,
   projectId,
@@ -13,6 +13,7 @@ export function WorkflowEditor({
   configuredVideoModel,
   configuredVoiceModel,
   configuredMusicModel,
+  onProjectChange,
 }: {
   project: ProjectDocument;
   projectId: string;
@@ -23,6 +24,7 @@ export function WorkflowEditor({
   configuredVideoModel: string | null;
   configuredVoiceModel: string | null;
   configuredMusicModel: string | null;
+  onProjectChange: (project: ProjectDocument) => void;
 }) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
@@ -59,7 +61,7 @@ export function WorkflowEditor({
     string | null
   >(null);
   const [notice, setNotice] = useState(
-    "카드는 이동할 수 있고, 오른쪽 연결점을 다른 카드의 왼쪽 연결점으로 드래그할 수 있습니다.",
+    "연결이 끊긴 단계는 자동 제외됩니다. 단계를 건너뛰려면 앞 단계와 다음 단계를 직접 연결하세요.",
   );
   const boardRequiredWidth = Math.max(
     metrics.boardMinWidth,
@@ -82,7 +84,6 @@ export function WorkflowEditor({
         if (typeof parsed === "object" && parsed !== null) {
           const record = parsed as Record<string, unknown>;
           const storedPositions = record.positions;
-          const storedConnections = record.connections;
           if (
             record.version === 4 &&
             typeof storedPositions === "object" &&
@@ -102,19 +103,6 @@ export function WorkflowEditor({
             setPositions(storedPositions as Record<string, WorkflowPosition>);
             layoutInitializedRef.current = true;
             layoutCustomizedRef.current = true;
-          }
-          if (
-            Array.isArray(storedConnections) &&
-            storedConnections.every(
-              (connection) =>
-                typeof connection === "object" &&
-                connection !== null &&
-                typeof (connection as WorkflowConnection).id === "string" &&
-                typeof (connection as WorkflowConnection).source === "string" &&
-                typeof (connection as WorkflowConnection).target === "string",
-            )
-          ) {
-            setConnections(storedConnections as WorkflowConnection[]);
           }
         }
       }
@@ -269,26 +257,40 @@ export function WorkflowEditor({
     }
 
     const id = `${source}-${target}`;
-    layoutCustomizedRef.current = true;
-    setConnections((current) => [
-      ...current.filter(
+    const nextConnections = [
+      ...connections.filter(
         (connection) =>
           connection.source !== source && connection.target !== target,
       ),
       { id, source, target },
-    ]);
+    ];
+    updateConnections(nextConnections);
     setSelectedConnectionId(id);
     setNotice(
-      "연결을 변경했습니다. 이 편집은 아직 실제 제작 실행 순서에는 반영되지 않습니다.",
+      "연결을 변경했습니다. 연결된 단계의 포함 상태가 프로젝트에 반영되었습니다.",
     );
+  };
+
+  const updateConnections = (nextConnections: WorkflowConnection[]) => {
+    layoutCustomizedRef.current = true;
+    setConnections(nextConnections);
+    const includedIds = includedWorkflowStepIds(steps, nextConnections);
+    const next = structuredClone(project);
+    for (const step of next.workflow.steps) {
+      const included = includedIds.has(step.id);
+      if (step.included === included) continue;
+      step.included = included;
+      if (step.status !== "실행 중") {
+        step.status = "대기";
+        step.summary = included ? "실행 전" : "워크플로 연결에서 제외됨";
+      }
+    }
+    onProjectChange(next);
   };
 
   const deleteSelectedConnection = () => {
     if (!selectedConnectionId) return;
-    layoutCustomizedRef.current = true;
-    setConnections((current) =>
-      current.filter((connection) => connection.id !== selectedConnectionId),
-    );
+    updateConnections(connections.filter((connection) => connection.id !== selectedConnectionId));
     setSelectedConnectionId(null);
     setNotice(
       "연결선을 삭제했습니다. 연결되지 않은 단계는 현재 제작 흐름에서 제외된 것으로 표시됩니다.",
@@ -305,9 +307,7 @@ export function WorkflowEditor({
     }
     if (event.key === "Delete" || event.key === "Backspace") {
       event.preventDefault();
-      setConnections((current) =>
-        current.filter((connection) => connection.id !== connectionId),
-      );
+      updateConnections(connections.filter((connection) => connection.id !== connectionId));
       setSelectedConnectionId(null);
       setNotice(
         "연결선을 삭제했습니다. 연결되지 않은 단계는 현재 제작 흐름에서 제외된 것으로 표시됩니다.",

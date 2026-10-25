@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { ProjectFileEntry, ProjectFilesResult } from "@/lib/project-file-types";
 import type { ProjectDeletionResult, ProjectListResult, ProjectMutationResult, ProjectSummary } from "@/lib/project-management-types";
 import type { ProjectDocument } from "@/lib/project-schema";
+import type { ProjectTemplate, TemplateListResult } from "@/lib/template-types";
 import type { ScriptGenerationInput, ScriptGenerationRunResult } from "@/lib/script-generation-types";
 import type { ImageConfigurationAction, ImageGenerationRunResult } from "@/lib/image-generation-types";
 import type { VideoConfigurationAction, VideoGenerationRunResult } from "@/lib/video-generation-types";
@@ -13,6 +14,7 @@ import type { RenderRunResult } from "@/lib/rendering-types";
 import { validateEditingTimeline } from "@/lib/editing-timeline";
 import { DashboardView } from "./shorts-dashboard-view";
 import { Icon } from "./shorts-dashboard-shared";
+import { ProjectCreateDialog, TemplateManager } from "./shorts-dashboard-templates";
 
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -81,6 +83,7 @@ function EmptyWorkspace({
 }
 export function ShortsDashboard({ configuredImageModel, configuredVideoModel, configuredVoiceModel, configuredMusicModel }: { configuredImageModel: string | null; configuredVideoModel: string | null; configuredVoiceModel: string | null; configuredMusicModel: string | null }) {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [templates, setTemplates] = useState<ProjectTemplate[]>([]);
   const [project, setProject] = useState<ProjectDocument | null>(null);
   const [files, setFiles] = useState<ProjectFileEntry[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -89,6 +92,20 @@ export function ShortsDashboard({ configuredImageModel, configuredVideoModel, co
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [activeRenderRunId, setActiveRenderRunId] = useState<string | null>(null);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [templateManagerOpen, setTemplateManagerOpen] = useState(false);
+
+  useEffect(() => {
+    if (!createDialogOpen && !templateManagerOpen) return;
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+    };
+  }, [createDialogOpen, templateManagerOpen]);
 
   useEffect(() => {
     if (!notice && !error) return;
@@ -136,9 +153,13 @@ export function ShortsDashboard({ configuredImageModel, configuredVideoModel, co
     let active = true;
     async function loadProjects() {
       try {
-        const result = await requestJson<ProjectListResult>("/api/projects");
+        const [result, templateResult] = await Promise.all([
+          requestJson<ProjectListResult>("/api/projects"),
+          requestJson<TemplateListResult>("/api/templates"),
+        ]);
         if (!active) return;
         setProjects(result.projects);
+        setTemplates(templateResult.templates);
         if (result.errors.length > 0)
           setError(
             `${result.errors.length}개 프로젝트를 읽지 못했습니다. 손상된 폴더는 유지했습니다.`,
@@ -168,18 +189,13 @@ export function ShortsDashboard({ configuredImageModel, configuredVideoModel, co
     };
   }, []);
 
-  const createNewProject = async () => {
-    const name = window.prompt(
-      "새 프로젝트 이름을 입력하세요.",
-      "새 쇼츠 프로젝트",
-    );
-    if (name === null) return;
+  const createNewProject = async (name: string, templateId: string | null) => {
     setBusy(true);
     setError(null);
     try {
       const result = await requestJson<ProjectMutationResult>("/api/projects", {
         method: "POST",
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, templateId }),
       });
       const filesResponse = await requestJson<ProjectFilesResult>(
         `/api/projects/${result.project.project.id}/files`,
@@ -188,13 +204,44 @@ export function ShortsDashboard({ configuredImageModel, configuredVideoModel, co
       setProject(result.project);
       setFiles(filesResponse.files);
       setSearchQuery("");
-      setNotice("새 프로젝트를 만들고 로컬 저장소에 저장했습니다.");
+      setCreateDialogOpen(false);
+      setNotice(templateId ? "템플릿 설정을 적용한 새 프로젝트를 저장했습니다." : "새 프로젝트를 만들고 로컬 저장소에 저장했습니다.");
     } catch (caught) {
       showError(caught);
     } finally {
       setBusy(false);
       setLoading(false);
     }
+  };
+
+  const createCurrentTemplate = async (name: string) => {
+    if (!project) return;
+    setBusy(true);
+    try {
+      const result = await requestJson<TemplateListResult>("/api/templates", { method: "POST", body: JSON.stringify({ name, project }) });
+      setTemplates(result.templates);
+      setNotice("현재 제작 설정을 템플릿으로 저장했습니다.");
+    } catch (caught) { showError(caught); } finally { setBusy(false); }
+  };
+
+  const updateCurrentTemplate = async (template: ProjectTemplate, name: string) => {
+    if (!project) return;
+    setBusy(true);
+    try {
+      const result = await requestJson<TemplateListResult>(`/api/templates/${template.id}`, { method: "PUT", body: JSON.stringify({ name, project }) });
+      setTemplates(result.templates);
+      setNotice("템플릿 이름과 제작 설정을 수정했습니다.");
+    } catch (caught) { showError(caught); } finally { setBusy(false); }
+  };
+
+  const deleteSavedTemplate = async (template: ProjectTemplate) => {
+    if (!window.confirm(`'${template.name}' 템플릿을 삭제할까요? 프로젝트는 삭제되지 않습니다.`)) return;
+    setBusy(true);
+    try {
+      const result = await requestJson<TemplateListResult>(`/api/templates/${template.id}`, { method: "DELETE" });
+      setTemplates(result.templates);
+      setNotice("템플릿을 삭제했습니다.");
+    } catch (caught) { showError(caught); } finally { setBusy(false); }
   };
 
   const renameCurrentProject = async () => {
@@ -640,19 +687,16 @@ export function ShortsDashboard({ configuredImageModel, configuredVideoModel, co
   };
 
   if (!project)
-    return (
-      <EmptyWorkspace
-        loading={loading || busy}
-        error={error}
-        onCreate={() => void createNewProject()}
-      />
-    );
+    return <>
+      <EmptyWorkspace loading={loading || busy} error={error} onCreate={() => setCreateDialogOpen(true)} />
+      {createDialogOpen && <ProjectCreateDialog templates={templates} busy={busy} onClose={() => setCreateDialogOpen(false)} onCreate={(name, templateId) => void createNewProject(name, templateId)} />}
+    </>;
 
   const persistedRenderRunId = [...project.runs].reverse().find(
     (run) => run.stageId === "editing" && run.status === "실행 중",
   )?.id ?? null;
 
-  return (
+  return (<>
     <DashboardView
       key={project.project.id}
       project={project}
@@ -663,7 +707,8 @@ export function ShortsDashboard({ configuredImageModel, configuredVideoModel, co
       notice={notice}
       error={error}
       onSearchChange={setSearchQuery}
-      onCreate={() => void createNewProject()}
+      onCreate={() => setCreateDialogOpen(true)}
+      onTemplates={() => setTemplateManagerOpen(true)}
       onProjectSelect={(projectId) => void openProject(projectId)}
       onRename={() => void renameCurrentProject()}
       onSave={() => void saveCurrentProject()}
@@ -691,5 +736,7 @@ export function ShortsDashboard({ configuredImageModel, configuredVideoModel, co
       configuredVoiceModel={configuredVoiceModel}
       configuredMusicModel={configuredMusicModel}
     />
-  );
+    {createDialogOpen && <ProjectCreateDialog templates={templates} busy={busy} onClose={() => setCreateDialogOpen(false)} onCreate={(name, templateId) => void createNewProject(name, templateId)} />}
+    {templateManagerOpen && <TemplateManager templates={templates} busy={busy} onClose={() => setTemplateManagerOpen(false)} onCreate={(name) => void createCurrentTemplate(name)} onUpdate={(template, name) => void updateCurrentTemplate(template, name)} onDelete={(template) => void deleteSavedTemplate(template)} />}
+  </>);
 }

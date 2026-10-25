@@ -5,6 +5,7 @@ import { open, rename, rm } from "node:fs/promises";
 import path from "node:path";
 
 import type { ProjectDocument, WorkflowStatus } from "../project-schema";
+import { assertWorkflowStepIncluded } from "../workflow-configuration";
 import { applyVideoConfiguration, videoGenerationSceneIds } from "../video-generation-project";
 import type { VideoConfigurationAction, VideoGenerationRunResult } from "../video-generation-types";
 import { generateVideoWithFal } from "./fal-video-generation";
@@ -100,6 +101,7 @@ export async function startVideoGeneration(
   const runId = runIdFor(requestId);
   const key = runKey(projectId, runId);
   const project = await loadProjectDocument(projectId);
+  assertWorkflowStepIncluded(project, "video");
   let sceneIds: string[];
   try {
     sceneIds = videoGenerationSceneIds(project, sceneIdsInput);

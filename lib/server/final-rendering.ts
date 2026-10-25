@@ -7,6 +7,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 
 import { timelineDuration, validateEditingTimeline } from "../editing-timeline";
 import type { ProjectDocument, WorkflowStatus } from "../project-schema";
+import { assertWorkflowStepIncluded, workflowInputBlockers } from "../workflow-configuration";
 import type { RenderRunResult, RenderRuntimeStatus } from "../rendering-types";
 import { listProjects } from "./project-management";
 import {
@@ -174,6 +175,9 @@ export async function startFinalRender(projectId: string, requestId: unknown): P
   const runId = runIdFor(requestId);
   const key = runKey(projectId, runId);
   const project = await loadProjectDocument(projectId);
+  assertWorkflowStepIncluded(project, "editing");
+  const workflowBlockers = workflowInputBlockers(project, "editing");
+  if (workflowBlockers.length > 0) throw new ProjectStorageError("WRITE_FAILED", `최종 편집 입력이 부족합니다. ${workflowBlockers.join(" ")}`);
   const existing = project.runs.find((run) => run.id === runId);
   if (existing) return { runId, status: existing.status, project, created: false };
   if (activeRuns.has(key)) return { runId, status: "실행 중", project, created: false };

@@ -13,6 +13,7 @@ import {
   saveProjectDocument,
   type ProjectStorageOptions,
 } from "./project-storage-core.ts";
+import { applyTemplateSettings, loadTemplate } from "./template-management-core.ts";
 
 const workflowSteps: ProjectDocument["workflow"]["steps"] = [
   { id: "script", label: "대본·장면 구성", order: 1, included: true, status: "대기", summary: "실행 전", settings: {} },
@@ -56,7 +57,7 @@ export async function listProjects(options: ProjectStorageOptions = {}): Promise
   const projects: ProjectSummary[] = [];
   const errors: ProjectListResult["errors"] = [];
   for (const entry of entries) {
-    if (!entry.isDirectory() || entry.isSymbolicLink() || entry.name.startsWith(".")) continue;
+    if (!entry.isDirectory() || entry.isSymbolicLink() || entry.name.startsWith(".") || entry.name === "templates") continue;
     try {
       projects.push(summaryOf(await loadProjectDocument(entry.name, options)));
     } catch (error) {
@@ -67,10 +68,10 @@ export async function listProjects(options: ProjectStorageOptions = {}): Promise
   return { projects, errors };
 }
 
-export async function createProject(nameInput: unknown, options: ProjectStorageOptions = {}): Promise<ProjectDocument> {
+export async function createProject(nameInput: unknown, options: ProjectStorageOptions = {}, templateId?: unknown): Promise<ProjectDocument> {
   const name = projectName(nameInput);
   const now = new Date().toISOString();
-  const project: ProjectDocument = {
+  let project: ProjectDocument = {
     schemaVersion: 4,
     project: {
       id: `project-${randomUUID()}`,
@@ -96,6 +97,10 @@ export async function createProject(nameInput: unknown, options: ProjectStorageO
       settings: { aspectRatio: "9:16", width: 1080, height: 1920, fps: 30, quality: "standard" },
     },
   };
+  if (templateId !== undefined && templateId !== null && templateId !== "") {
+    if (typeof templateId !== "string") throw new ProjectStorageError("WRITE_FAILED", "템플릿 ID가 올바르지 않습니다.");
+    project = applyTemplateSettings(project, await loadTemplate(templateId, options));
+  }
   return saveProjectDocument(project, options);
 }
 

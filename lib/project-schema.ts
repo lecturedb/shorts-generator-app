@@ -660,6 +660,9 @@ export function parseProjectDocument(input: unknown): ProjectDocument {
     fail("workflow.steps", "고정된 6개 제작 단계를 각각 한 번씩 포함해야 합니다.");
   }
   if (new Set(steps.map((step) => step.order)).size !== steps.length) fail("workflow.steps", "단계 순서는 중복될 수 없습니다.");
+  if (steps.some((step, index) => step.id !== workflowStepIds[index] || step.order !== index + 1)) {
+    fail("workflow.steps", "제작 단계는 대본, 이미지, 영상, 더빙, 배경음악, 최종 편집 순서를 유지해야 합니다.");
+  }
 
   const scriptValue = objectAt(root.script, "script");
   const script = {

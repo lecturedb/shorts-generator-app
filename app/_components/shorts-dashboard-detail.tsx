@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useRef, useState } from "react";
 import type { ProjectDocument } from "@/lib/project-schema";
+import { workflowInputBlockers } from "@/lib/workflow-configuration";
 import type { ScriptGenerationInput } from "@/lib/script-generation-types";
 import type { ImageConfigurationAction } from "@/lib/image-generation-types";
 import type { VideoConfigurationAction } from "@/lib/video-generation-types";
@@ -388,11 +389,14 @@ export function ScriptStepPanel({
 }
 
 export function DetailPanel({ project, selectedStep, selectedFile, context, busy, configuredImageModel, configuredVideoModel, configuredVoiceModel, configuredMusicModel, playheadSeconds, timelinePlaying, timelineSelection, onTimelinePlayingChange, onPlayheadChange, onProjectChange, onGenerate, onApplyScript, onGenerateImages, onGenerateVideoPrompts, onGenerateVideos, onGenerateVoice, onVoiceConfiguration, onGenerateMusic, onMusicConfiguration, onRender, onCancelRender, activeRenderRunId }: { project: ProjectDocument; selectedStep: WorkflowStep; selectedFile: DashboardFile | undefined; context: PanelContext; busy: boolean; configuredImageModel: string | null; configuredVideoModel: string | null; configuredVoiceModel: string | null; configuredMusicModel: string | null; playheadSeconds: number; timelinePlaying: boolean; timelineSelection: TimelineSelection | null; onTimelinePlayingChange: (playing: boolean) => void; onPlayheadChange: (seconds: number) => void; onProjectChange: (project: ProjectDocument) => void; onGenerate: (input: ScriptGenerationInput) => void; onApplyScript: (narrations: string[]) => void; onGenerateImages: (sceneIds?: string[]) => void; onGenerateVideoPrompts: () => void; onGenerateVideos: (sceneIds?: string[]) => void; onGenerateVoice: (input: VoiceGenerationInput) => void; onVoiceConfiguration: (action: VoiceConfigurationAction) => void; onGenerateMusic: (input: MusicGenerationInput) => void; onMusicConfiguration: (action: MusicConfigurationAction) => void; onRender: () => void; onCancelRender: (runId: string) => void; activeRenderRunId: string | null }) {
+  const blockers = context === "step" ? workflowInputBlockers(project, selectedStep.id) : [];
   return (
     <aside aria-labelledby="detail-heading" className="h-full min-w-0 overflow-y-auto rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)] sm:p-5">
       <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-600">{context === "file" ? "File preview" : context === "script" ? "Script" : "Step detail"}</p>
       <h2 id="detail-heading" className="mt-1 mb-4 truncate text-lg font-extrabold text-slate-950">{context === "file" ? "선택한 파일 미리보기" : context === "script" ? "대본·장면 구성" : "선택한 단계"}</h2>
-      {context === "step" && selectedStep.id === "script" ? (
+      {context === "step" && !selectedStep.included ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4"><p className="text-sm font-black text-amber-900">이 단계는 워크플로에서 제외됨</p><p className="mt-2 text-xs leading-5 text-amber-800">기존 결과는 보존되지만 새 실행은 차단됩니다. 제작 흐름 카드에서 단계를 포함한 뒤 프로젝트를 저장하세요.</p></div>
+      ) : context === "step" && selectedStep.id === "script" ? (
         <ScriptStepPanel project={project} busy={busy} onProjectChange={onProjectChange} onGenerate={onGenerate} onApplyScript={onApplyScript} />
       ) : context === "step" && selectedStep.id === "image" ? (
         <ImageStepPanel project={project} busy={busy} configuredImageModel={configuredImageModel} onGenerateImages={onGenerateImages} onGenerateVideoPrompts={onGenerateVideoPrompts} />
@@ -411,6 +415,7 @@ export function DetailPanel({ project, selectedStep, selectedFile, context, busy
       ) : (
         <div className="rounded-2xl bg-linear-to-br from-violet-600 to-indigo-700 p-5 text-white"><div className="flex items-start justify-between"><span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15"><Icon name={stepIcons[selectedStep.id] ?? "sparkles"} className="h-7 w-7" /></span><StatusMark status={selectedStep.status} compact /></div><p className="mt-6 text-xs font-bold text-violet-200">선택한 제작 단계</p><h3 className="mt-1 text-xl font-black">{selectedStep.label}</h3><p className="mt-2 text-sm text-violet-100">{selectedStep.summary}</p><p className="mt-5 rounded-xl bg-white/10 p-3 text-xs leading-5">설정 내용은 표시만 하며 실제 실행은 각 서비스 구현 단계에서 연결됩니다.</p></div>
       )}
+      {context === "step" && selectedStep.included && blockers.length > 0 && <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold leading-5 text-amber-800"><p className="font-black">현재 실행 차단 이유</p>{blockers.map((blocker) => <p key={blocker}>• {blocker}</p>)}</div>}
     </aside>
   );
 }

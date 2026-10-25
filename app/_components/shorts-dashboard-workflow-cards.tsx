@@ -34,7 +34,7 @@ export function WorkflowCards({ project, configuredImageModel, configuredVideoMo
             return (
               <article
                 key={step.id}
-                className={`group absolute rounded-2xl border bg-white shadow-md transition-shadow ${isSelected ? "border-violet-500 shadow-[0_10px_24px_rgba(124,58,237,0.22)]" : "border-slate-300 hover:border-violet-400 hover:shadow-lg"}`}
+                className={`group absolute rounded-2xl border bg-white shadow-md transition-shadow ${step.included ? "" : "opacity-55 grayscale"} ${isSelected ? "border-violet-500 shadow-[0_10px_24px_rgba(124,58,237,0.22)]" : "border-slate-300 hover:border-violet-400 hover:shadow-lg"}`}
                 style={{
                   width: metrics.cardWidth,
                   height: metrics.cardHeight,

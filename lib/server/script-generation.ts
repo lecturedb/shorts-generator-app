@@ -3,6 +3,7 @@ import "server-only";
 import type { ProjectDocument, WorkflowStatus } from "../project-schema";
 import type { ScriptGenerationRunResult } from "../script-generation-types";
 import { applyGeneratedScriptResult } from "../script-generation-project";
+import { assertWorkflowStepIncluded } from "../workflow-configuration";
 import { parseScriptGenerationInput } from "../script-generation-validation";
 import { generateScriptWithOpenAI } from "./openai-script-generation";
 import { listProjects } from "./project-management";
@@ -39,6 +40,7 @@ export async function startScriptGeneration(
   const input = parseScriptGenerationInput(rawInput);
   const runId = runIdFor(requestId);
   const project = await loadProjectDocument(projectId);
+  assertWorkflowStepIncluded(project, "script");
   const existing = project.runs.find((run) => run.id === runId);
   if (existing) return { runId, status: existing.status, project, created: false };
   if (activeRuns.has(runId)) return { runId, status: "실행 중", project, created: false };

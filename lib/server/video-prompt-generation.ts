@@ -2,6 +2,7 @@ import "server-only";
 
 import type { ImageGenerationRunResult } from "../image-generation-types";
 import type { ProjectDocument } from "../project-schema";
+import { assertWorkflowStepIncluded } from "../workflow-configuration";
 import { loadProjectDocument, ProjectStorageError, saveProjectDocument } from "./project-storage";
 import { generateVideoPromptsWithOpenAI } from "./openai-video-prompts";
 
@@ -31,6 +32,7 @@ export async function startVideoPromptGeneration(projectId: string, requestId: u
   const runId = runIdFor(requestId);
   const key = keyFor(projectId, runId);
   const project = await loadProjectDocument(projectId);
+  assertWorkflowStepIncluded(project, "video");
   const existing = project.runs.find((run) => run.id === runId);
   if (existing) return { runId, status: existing.status, project, created: false };
   const targets = validateTargets(project);

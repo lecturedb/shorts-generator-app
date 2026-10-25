@@ -9,6 +9,7 @@ import { applyMusicConfiguration, applyMusicSettings } from "../music-generation
 import type { MusicConfigurationAction, MusicGenerationRunResult } from "../music-generation-types";
 import { parseMusicGenerationInput } from "../music-generation-validation";
 import type { ProjectDocument, WorkflowStatus } from "../project-schema";
+import { assertWorkflowStepIncluded } from "../workflow-configuration";
 import { generateMusicWithFal } from "./fal-music-generation";
 import { listProjects } from "./project-management";
 import { loadProjectDocument, ProjectStorageError, resolveProjectFilePath, saveProjectDocument } from "./project-storage";
@@ -113,6 +114,7 @@ export async function startMusicGeneration(projectId: string, requestId: unknown
   const runId = runIdFor(requestId);
   const key = runKey(projectId, runId);
   let project = await loadProjectDocument(projectId);
+  assertWorkflowStepIncluded(project, "music");
   let input;
   try { input = parseMusicGenerationInput(rawInput); }
   catch (error) { throw new ProjectStorageError("WRITE_FAILED", error instanceof Error ? error.message : "음악 설정이 올바르지 않습니다."); }

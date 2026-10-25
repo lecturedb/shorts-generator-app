@@ -3,7 +3,12 @@
 import { useState } from "react";
 import type { ProjectSummary } from "@/lib/project-management-types";
 import type { ProjectDocument } from "@/lib/project-schema";
-import { Icon, fileGroups, fileIcon, type DashboardFile } from "./shorts-dashboard-shared";
+import {
+  Icon,
+  fileGroups,
+  fileIcon,
+  type DashboardFile,
+} from "./shorts-dashboard-shared";
 
 export interface SidebarContentProps {
   project: ProjectDocument;
@@ -13,6 +18,7 @@ export interface SidebarContentProps {
   searchQuery: string;
   onSearchChange: (value: string) => void;
   onCreate: () => void;
+  onTemplates: () => void;
   onProjectSelect: (projectId: string) => void;
   onCollapse: () => void;
   onFileSelect: (fileId: string) => void;
@@ -29,6 +35,7 @@ export function SidebarContent({
   searchQuery,
   onSearchChange,
   onCreate,
+  onTemplates,
   onProjectSelect,
   onCollapse,
   onFileSelect,
@@ -63,7 +70,7 @@ export function SidebarContent({
           <button
             type="button"
             onClick={onCollapse}
-            className="sidebar-expand-control absolute -right-3 top-10.5 z-20 hidden h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white font-bold text-slate-500 shadow-sm transition hover:border-violet-200 hover:text-violet-700 sm:inline-flex"
+            className="sidebar-expand-control absolute -right-3 top-10.5 z-20 hidden h-7 w-7 items-center justify-center rounded-full border border-violet-200 bg-white font-bold text-violet-700 shadow-sm transition hover:border-violet-400 hover:bg-violet-50 sm:inline-flex"
             aria-label="사이드바 펼치기"
             title="사이드바 펼치기"
           >
@@ -73,11 +80,13 @@ export function SidebarContent({
           <button
             type="button"
             onClick={onCollapse}
-            className="hidden h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 sm:inline-flex"
+            className="hidden h-8 shrink-0 items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-2 text-slate-600 shadow-sm transition hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700 sm:inline-flex"
             aria-label="사이드바 접기"
             title="사이드바 접기"
           >
-            <span className="text-xl leading-none">«</span>
+            <span aria-hidden="true" className="text-lg leading-none">
+              «
+            </span>
           </button>
         )}
       </div>
@@ -230,7 +239,9 @@ export function SidebarContent({
                                           name="document"
                                           className="h-3 w-3 shrink-0 text-violet-600"
                                         />
-                                        <span className="truncate">전체 대본</span>
+                                        <span className="truncate">
+                                          전체 대본
+                                        </span>
                                         <span className="sidebar-file-badge ml-auto shrink-0 rounded-full bg-emerald-50 px-1.5 font-bold text-emerald-700">
                                           {project.scenes.length}개 장면
                                         </span>
@@ -241,7 +252,8 @@ export function SidebarContent({
                                       </p>
                                     ))}
                                   {groupFiles.map((file) => {
-                                    const isSelected = file.id === selectedFileId;
+                                    const isSelected =
+                                      file.id === selectedFileId;
                                     return (
                                       <button
                                         key={file.id}
@@ -301,6 +313,7 @@ export function SidebarContent({
           <button
             key={label}
             type="button"
+            onClick={label === "템플릿" ? onTemplates : undefined}
             className={`flex w-full items-center rounded-lg text-[8px] font-semibold leading-3 text-slate-600 transition hover:bg-slate-50 ${collapsed ? "h-8 justify-center" : "h-8 gap-2 px-2"}`}
             aria-label={label}
           >
@@ -312,4 +325,3 @@ export function SidebarContent({
     </div>
   );
 }
-

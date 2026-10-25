@@ -77,7 +77,7 @@ export const workflowMetrics: Record<
 };
 
 export const allowedWorkflowTargets: Record<string, readonly string[]> = {
-  script: ["image"],
+  script: ["image", "video", "voice", "music", "editing"],
   image: ["video", "voice", "music", "editing"],
   video: ["voice", "music", "editing"],
   voice: ["music", "editing"],
@@ -133,11 +133,33 @@ export function workflowColumnCount(
 export function createInitialWorkflowConnections(
   steps: readonly WorkflowStep[],
 ): WorkflowConnection[] {
-  return steps.slice(0, -1).map((step, index) => ({
-    id: `${step.id}-${steps[index + 1].id}`,
+  const includedSteps = steps.filter((step) => step.included);
+  return includedSteps.slice(0, -1).map((step, index) => ({
+    id: `${step.id}-${includedSteps[index + 1].id}`,
     source: step.id,
-    target: steps[index + 1].id,
+    target: includedSteps[index + 1].id,
   }));
+}
+
+export function includedWorkflowStepIds(
+  steps: readonly WorkflowStep[],
+  connections: readonly WorkflowConnection[],
+): Set<string> {
+  const targets = new Set(connections.map((connection) => connection.target));
+  const roots = steps.filter(
+    (step) => connections.some((connection) => connection.source === step.id) && !targets.has(step.id),
+  );
+  const root = roots[0] ?? steps.find((step) => step.included) ?? steps[0];
+  if (!root) return new Set();
+  const included = new Set<string>([root.id]);
+  let current: string = root.id;
+  while (true) {
+    const connection = connections.find((candidate) => candidate.source === current);
+    if (!connection || included.has(connection.target)) break;
+    included.add(connection.target);
+    current = connection.target;
+  }
+  return included;
 }
 
 export const stepIcons: Record<string, IconName> = {
