@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ProjectFileEntry, ProjectFilesResult } from "@/lib/project-file-types";
 import type { ProjectDeletionResult, ProjectListResult, ProjectMutationResult, ProjectSummary } from "@/lib/project-management-types";
 import type { ProjectDocument } from "@/lib/project-schema";
@@ -11,7 +11,7 @@ import type { VideoConfigurationAction, VideoGenerationRunResult } from "@/lib/v
 import type { VoiceConfigurationAction, VoiceGenerationInput, VoiceGenerationRunResult } from "@/lib/voice-generation-types";
 import type { MusicConfigurationAction, MusicGenerationInput, MusicGenerationRunResult } from "@/lib/music-generation-types";
 import type { RenderRunResult } from "@/lib/rendering-types";
-import { validateEditingTimeline } from "@/lib/editing-timeline";
+import { syncEditingTimelineAudioSelections, validateEditingTimeline } from "@/lib/editing-timeline";
 import { DashboardView } from "./shorts-dashboard-view";
 import { Icon } from "./shorts-dashboard-shared";
 import { ProjectCreateDialog, TemplateManager } from "./shorts-dashboard-templates";
@@ -94,6 +94,11 @@ export function ShortsDashboard({ configuredImageModel, configuredVideoModel, co
   const [activeRenderRunId, setActiveRenderRunId] = useState<string | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [templateManagerOpen, setTemplateManagerOpen] = useState(false);
+  const displayedProject = useMemo(() => {
+    if (!project) return null;
+    const synchronized = structuredClone(project);
+    return syncEditingTimelineAudioSelections(synchronized) ? synchronized : project;
+  }, [project]);
 
   useEffect(() => {
     if (!createDialogOpen && !templateManagerOpen) return;
@@ -686,7 +691,7 @@ export function ShortsDashboard({ configuredImageModel, configuredVideoModel, co
     }
   };
 
-  if (!project)
+  if (!project || !displayedProject)
     return <>
       <EmptyWorkspace loading={loading || busy} error={error} onCreate={() => setCreateDialogOpen(true)} />
       {createDialogOpen && <ProjectCreateDialog templates={templates} busy={busy} onClose={() => setCreateDialogOpen(false)} onCreate={(name, templateId) => void createNewProject(name, templateId)} />}
@@ -699,7 +704,7 @@ export function ShortsDashboard({ configuredImageModel, configuredVideoModel, co
   return (<>
     <DashboardView
       key={project.project.id}
-      project={project}
+      project={displayedProject}
       projects={projects}
       files={files}
       searchQuery={searchQuery}

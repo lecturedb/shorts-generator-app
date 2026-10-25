@@ -7,6 +7,7 @@ import path from "node:path";
 import type { ProjectDocument, WorkflowStatus } from "../project-schema";
 import { assertWorkflowStepIncluded } from "../workflow-configuration";
 import { applyVoiceConfiguration } from "../voice-generation-project";
+import { syncEditingTimelineAudioSelections } from "../editing-timeline";
 import type { VoiceConfigurationAction, VoiceGenerationRunResult } from "../voice-generation-types";
 import { parseVoiceGenerationInput, voiceInputSettings } from "../voice-generation-validation";
 import { generateVoiceWithFal } from "./fal-voice-generation";
@@ -162,7 +163,10 @@ export async function performVoiceGeneration(projectId: string, runId: string, r
       if (generated.timestamps.length > 0) {
         project.voice.timestamps.push({ assetId, items: generated.timestamps });
       }
-      if (selectNewCandidate) project.voice.selectedAssetId = assetId;
+      if (selectNewCandidate) {
+        project.voice.selectedAssetId = assetId;
+        syncEditingTimelineAudioSelections(project);
+      }
       project.voice.provider = "fal.ai";
       project.voice.model = generated.model;
       project.voice.endpoint = generated.model;

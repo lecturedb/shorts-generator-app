@@ -6,6 +6,7 @@ import { open, readFile, rename, rm } from "node:fs/promises";
 import path from "node:path";
 
 import { applyMusicConfiguration, applyMusicSettings } from "../music-generation-project";
+import { syncEditingTimelineAudioSelections } from "../editing-timeline";
 import type { MusicConfigurationAction, MusicGenerationRunResult } from "../music-generation-types";
 import { parseMusicGenerationInput } from "../music-generation-validation";
 import type { ProjectDocument, WorkflowStatus } from "../project-schema";
@@ -172,7 +173,10 @@ export async function performMusicGeneration(projectId: string, runId: string, r
         metadata: { format: "MP3", durationSeconds: actualDurationSeconds },
       });
       project.music.assetIds.push(assetId);
-      if (selectNewCandidate) project.music.selectedAssetId = assetId;
+      if (selectNewCandidate) {
+        project.music.selectedAssetId = assetId;
+        syncEditingTimelineAudioSelections(project);
+      }
       project.music.provider = "fal.ai";
       project.music.model = generated.model;
       project.music.endpoint = generated.model;

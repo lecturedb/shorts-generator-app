@@ -1,3 +1,4 @@
+import { syncEditingTimelineAudioSelections } from "./editing-timeline.ts";
 import type { ProjectDocument } from "./project-schema";
 import type { VoiceConfigurationAction } from "./voice-generation-types";
 
@@ -16,6 +17,7 @@ export function applyVoiceConfiguration(
     if (asset.role === "narration") asset.selected = asset.id === selected.id;
   }
   next.voice.selectedAssetId = selected.id;
+  syncEditingTimelineAudioSelections(next);
   next.voice.status = selected.stale.isStale ? "확인 필요" : "완료";
   next.voice.error = null;
   const step = next.workflow.steps.find((candidate) => candidate.id === "voice");

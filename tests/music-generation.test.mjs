@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
+import { createEditingTimeline } from "../lib/editing-timeline.ts";
 import { applyMusicConfiguration, applyMusicSettings, editingMusicInput } from "../lib/music-generation-project.ts";
 import { parseMusicGenerationInput, falMusicInput } from "../lib/music-generation-validation.ts";
 import { parseProjectDocument } from "../lib/project-schema.ts";
@@ -99,6 +100,11 @@ test("음악 설정과 목표 길이 변경은 기존 음악만 확인 필요로
 test("대표 음악 선택과 최종 편집 입력 연결은 이미지·영상·더빙 선택을 변경하지 않는다", async () => {
   const project = await fixture();
   addMusicCandidate(project);
+  project.editing.timeline = createEditingTimeline(project);
+  assert.ok(project.editing.timeline.music);
+  project.editing.timeline.music.volume = 0.4;
+  project.editing.timeline.music.fadeInSeconds = 1;
+  project.editing.timeline.music.fadeOutSeconds = 2;
   const unaffected = project.assets.filter((asset) => asset.role !== "background-music").map((asset) => [asset.id, asset.selected]);
   const second = addMusicCandidate(project, "asset-music-candidate-02", false);
   second.relativePath = "audio/music-02.mp3";
@@ -111,5 +117,9 @@ test("대표 음악 선택과 최종 편집 입력 연결은 이미지·영상·
     targetDurationSeconds: updated.project.settings.targetDurationSeconds,
     needsReview: false,
   });
+  assert.equal(updated.editing.timeline?.music?.assetId, "asset-music-candidate-02");
+  assert.equal(updated.editing.timeline?.music?.volume, 0.4);
+  assert.equal(updated.editing.timeline?.music?.fadeInSeconds, 1);
+  assert.equal(updated.editing.timeline?.music?.fadeOutSeconds, 2);
   assert.doesNotThrow(() => parseProjectDocument(updated));
 });

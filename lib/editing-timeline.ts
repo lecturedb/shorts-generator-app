@@ -234,6 +234,45 @@ export function createEditingTimeline(project: ProjectDocument): EditingTimeline
   return { ...timelineBase, subtitles: createSubtitleTrack(project, timelineBase) };
 }
 
+export function syncEditingTimelineAudioSelections(project: ProjectDocument): boolean {
+  const timeline = project.editing.timeline;
+  if (!timeline) return false;
+  const selectedVoiceId = project.voice.selectedAssetId;
+  const selectedMusicId = project.music.selectedAssetId;
+  const narrationChanged = (timeline.narration?.assetId ?? null) !== selectedVoiceId;
+  const musicChanged = (timeline.music?.assetId ?? null) !== selectedMusicId;
+  if (!narrationChanged && !musicChanged) return false;
+
+  const refreshed = createEditingTimeline(project);
+  if (narrationChanged) {
+    const volume = timeline.narration?.volume ?? 1;
+    timeline.narration = refreshed.narration
+      ? { ...refreshed.narration, volume }
+      : null;
+    const subtitleStyle = structuredClone(timeline.subtitles.style);
+    const subtitlesEnabled = timeline.subtitles.enabled;
+    timeline.subtitles = createSubtitleTrack(project, {
+      sceneClips: timeline.sceneClips,
+      narration: timeline.narration,
+    });
+    timeline.subtitles.enabled = subtitlesEnabled;
+    timeline.subtitles.style = subtitleStyle;
+  }
+  if (musicChanged) {
+    const previous = timeline.music;
+    timeline.music = refreshed.music
+      ? {
+          ...refreshed.music,
+          volume: previous?.volume ?? refreshed.music.volume,
+          fadeInSeconds: Math.min(previous?.fadeInSeconds ?? 0, refreshed.music.endSeconds - refreshed.music.startSeconds),
+          fadeOutSeconds: Math.min(previous?.fadeOutSeconds ?? 0, refreshed.music.endSeconds - refreshed.music.startSeconds),
+        }
+      : null;
+  }
+  project.editing.error = null;
+  return true;
+}
+
 export function timelineDuration(timeline: EditingTimeline): number {
   return Math.max(
     1,

@@ -1,5 +1,6 @@
+import { syncEditingTimelineAudioSelections } from "@/lib/editing-timeline";
 import { deleteProject, listProjects, renameProject, saveManagedProject } from "@/lib/server/project-management";
-import { loadProjectDocument, ProjectStorageError } from "@/lib/server/project-storage";
+import { loadProjectDocument, ProjectStorageError, saveProjectDocument } from "@/lib/server/project-storage";
 
 function errorResponse(error: unknown) {
   const message = error instanceof Error ? error.message : "프로젝트 요청을 처리할 수 없습니다.";
@@ -11,7 +12,9 @@ function errorResponse(error: unknown) {
 export async function GET(_request: Request, context: RouteContext<"/api/projects/[projectId]">) {
   try {
     const { projectId } = await context.params;
-    return Response.json({ project: await loadProjectDocument(projectId) });
+    const project = await loadProjectDocument(projectId);
+    if (syncEditingTimelineAudioSelections(project)) await saveProjectDocument(project);
+    return Response.json({ project });
   } catch (error) {
     return errorResponse(error);
   }

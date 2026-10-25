@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
+import { createEditingTimeline } from "../lib/editing-timeline.ts";
 import { parseProjectDocument } from "../lib/project-schema.ts";
 import { normalizeFalVoiceTimestamps } from "../lib/server/fal-voice-timestamps.ts";
 import { applyVoiceConfiguration } from "../lib/voice-generation-project.ts";
@@ -72,6 +73,24 @@ test("더빙 후보 선택은 이미지와 영상 자산을 변경하지 않는�
   const project = await fixture();
   const imageSelections = project.assets.filter((asset) => asset.role === "scene-image").map((asset) => [asset.id, asset.selected]);
   project.assets.push({
+    id: "asset-voice-candidate-01",
+    label: "전체 더빙 후보 1",
+    kind: "audio",
+    role: "narration",
+    stageId: "voice",
+    relativePath: "audio/narration-01.mp3",
+    createdAt: "2026-10-22T00:00:00.000Z",
+    selected: true,
+    sourceAssetIds: [],
+    stale: { isStale: false },
+    metadata: { format: "MP3", durationSeconds: 45 },
+  });
+  project.voice.assetIds.push("asset-voice-candidate-01");
+  project.voice.selectedAssetId = "asset-voice-candidate-01";
+  project.editing.timeline = createEditingTimeline(project);
+  assert.ok(project.editing.timeline.narration);
+  project.editing.timeline.narration.volume = 0.63;
+  project.assets.push({
     id: "asset-voice-candidate-02",
     label: "전체 더빙 후보 2",
     kind: "audio",
@@ -82,16 +101,19 @@ test("더빙 후보 선택은 이미지와 영상 자산을 변경하지 않는�
     selected: false,
     sourceAssetIds: [],
     stale: { isStale: false },
-    metadata: { format: "MP3" },
+    metadata: { format: "MP3", durationSeconds: 45 },
   });
   project.voice.assetIds.push("asset-voice-candidate-02");
   project.voice.timestamps.push({
     assetId: "asset-voice-candidate-02",
-    items: [{ text: "안녕", startSeconds: 0, endSeconds: 0.5 }],
+    items: [{ text: "안녕", startSeconds: 0, endSeconds: 45 }],
   });
 
   const updated = applyVoiceConfiguration(project, { action: "select-voice", assetId: "asset-voice-candidate-02" }, "2026-10-22T00:00:00.000Z");
   assert.equal(updated.voice.selectedAssetId, "asset-voice-candidate-02");
+  assert.equal(updated.editing.timeline?.narration?.assetId, "asset-voice-candidate-02");
+  assert.equal(updated.editing.timeline?.narration?.volume, 0.63);
+  assert.equal(updated.editing.timeline?.subtitles.alignment, "provider-timestamps");
   assert.deepEqual(updated.assets.filter((asset) => asset.role === "scene-image").map((asset) => [asset.id, asset.selected]), imageSelections);
   assert.doesNotThrow(() => parseProjectDocument(updated));
 });

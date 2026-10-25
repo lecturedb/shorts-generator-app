@@ -1,3 +1,4 @@
+import { syncEditingTimelineAudioSelections } from "./editing-timeline.ts";
 import type { MusicConfigurationAction, MusicGenerationInput } from "./music-generation-types";
 import { musicInputSettings } from "./music-generation-validation.ts";
 import type { ProjectDocument } from "./project-schema";
@@ -55,6 +56,7 @@ export function applyMusicConfiguration(project: ProjectDocument, action: MusicC
     if (asset.role === "background-music") asset.selected = asset.id === selected.id;
   }
   next.music.selectedAssetId = selected.id;
+  syncEditingTimelineAudioSelections(next);
   next.music.status = selected.stale.isStale ? "확인 필요" : "완료";
   next.music.error = null;
   const step = musicStep(next);

@@ -15,7 +15,7 @@ export function ProjectCreateDialog({
   onClose: () => void;
   onCreate: (name: string, templateId: string | null) => void;
 }) {
-  const [name, setName] = useState("새 쇼츠 프로젝트");
+  const [name, setName] = useState("");
   const [templateId, setTemplateId] = useState("");
   return (
     <div
@@ -58,6 +58,7 @@ export function ProjectCreateDialog({
               value={name}
               maxLength={120}
               onChange={(event) => setName(event.target.value)}
+              placeholder="새 쇼츠 프로젝트"
               className="mt-1 h-11 w-full rounded-xl border border-slate-200 px-3 font-normal"
             />
           </label>
