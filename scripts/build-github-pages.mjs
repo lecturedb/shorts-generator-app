@@ -9,6 +9,7 @@ const stagingRoot = await mkdtemp(path.join(projectRoot, ".github-pages-build-")
 const outputRoot = path.join(projectRoot, "out");
 const copiedEntries = [
   "app",
+  "fixtures",
   "lib",
   "public",
   "next.config.ts",
@@ -47,8 +48,13 @@ try {
     });
   }
   await copyFile(
-    path.join(projectRoot, "scripts", "github-pages-page.tsx"),
+    path.join(projectRoot, "app", "github-pages-page.tsx"),
     path.join(stagingRoot, "app", "page.tsx"),
+  );
+  await cp(
+    path.join(stagingRoot, "fixtures", "projects", "sample-project", "images"),
+    path.join(stagingRoot, "public", "demo", "images"),
+    { recursive: true },
   );
 
   const exitCode = await runNextBuild();

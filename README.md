@@ -57,10 +57,10 @@ and deployment → Source**에서 **GitHub Actions**를 선택해야 한다.
 GITHUB_REPOSITORY=owner/repository npm run build:pages
 ```
 
-GitHub Pages는 정적 파일만 제공하므로 배포본은 제품 소개와 실행 안내만
-표시한다. AI API 호출, 프로젝트 파일 저장, Python·FFmpeg 렌더링 등 실제 제작
-기능은 `npm run dev` 또는 `npm run build && npm run start`로 실행한 Node.js
-서버에서만 사용할 수 있다.
+GitHub Pages 배포본은 샘플 프로젝트로 전체 UI와 화면 내 로컬 편집을 체험할 수
+있는 데모다. 정적 파일만 제공되므로 AI API 호출, 프로젝트 파일 저장,
+Python·FFmpeg 렌더링 등 실제 제작 기능은 `npm run dev` 또는 `npm run build &&
+npm run start`로 실행한 Node.js 서버에서만 사용할 수 있다.
 
 최종 편집 화면에서는 장면별 자막 문구·시작·종료 시간과 자막 스타일, 24/30/60fps, 표준/고품질 출력을 설정할 수 있다. 렌더링 결과는 검증을 통과한 MP4만 프로젝트의 `output/`과 `project.json`에 등록되며 실패·취소한 작업의 임시 디렉터리는 정리된다.
 

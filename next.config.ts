@@ -18,6 +18,7 @@ const nextConfig: NextConfig = {
         basePath,
         trailingSlash: true,
         images: { unoptimized: true },
+        env: { NEXT_PUBLIC_GITHUB_PAGES_BASE_PATH: basePath },
       }
     : {
         cacheComponents: true,

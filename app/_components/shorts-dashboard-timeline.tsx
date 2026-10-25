@@ -22,6 +22,7 @@ import {
 } from "@/lib/editing-timeline";
 import { summarizeAudioSamples, type WaveformBar } from "@/lib/audio-waveform";
 import type { EditingTimeline, ProjectDocument } from "@/lib/project-schema";
+import { projectFileUrl } from "@/lib/project-file-url";
 import type { DashboardFile } from "./shorts-dashboard-shared";
 import { Icon } from "./shorts-dashboard-shared";
 
@@ -47,7 +48,7 @@ function timeLabel(seconds: number) {
 }
 
 function contentUrl(projectId: string, relativePath: string) {
-  return `/api/projects/${projectId}/files/content?path=${encodeURIComponent(relativePath)}`;
+  return projectFileUrl(projectId, relativePath);
 }
 
 function motionLabel(

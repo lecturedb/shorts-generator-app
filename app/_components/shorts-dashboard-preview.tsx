@@ -4,6 +4,7 @@ import Image from "next/image";
 import { createPortal } from "react-dom";
 import { useEffect, useState } from "react";
 import type { ProjectDocument } from "@/lib/project-schema";
+import { projectFileUrl } from "@/lib/project-file-url";
 import { Icon, type DashboardFile } from "./shorts-dashboard-shared";
 
 export function FileProblem({
@@ -133,7 +134,7 @@ export function PreviewVisual({
   const [videoExpanded, setVideoExpanded] = useState(false);
   const [expandedImageIndex, setExpandedImageIndex] = useState(0);
   const [expandedVideoIndex, setExpandedVideoIndex] = useState(0);
-  const contentUrl = `/api/projects/${project.project.id}/files/content?path=${encodeURIComponent(file.relativePath)}`;
+  const contentUrl = projectFileUrl(project.project.id, file.relativePath);
   const mediaAspectRatio =
     file.width && file.height ? `${file.width} / ${file.height}` : "16 / 9";
   const sceneImages = project.scenes.flatMap((scene) => {
@@ -149,7 +150,7 @@ export function PreviewVisual({
     label: file.label,
     path: file.relativePath,
   };
-  const expandedImageUrl = `/api/projects/${project.project.id}/files/content?path=${encodeURIComponent(expandedImage.path)}`;
+  const expandedImageUrl = projectFileUrl(project.project.id, expandedImage.path);
   const selectedSceneVideos = project.scenes.flatMap((scene) => {
     const asset = project.assets.find(
       (candidate) => candidate.id === scene.video.selectedAssetId,
@@ -174,7 +175,7 @@ export function PreviewVisual({
     label: file.label,
     path: file.relativePath,
   };
-  const expandedVideoUrl = `/api/projects/${project.project.id}/files/content?path=${encodeURIComponent(expandedVideo.path)}`;
+  const expandedVideoUrl = projectFileUrl(project.project.id, expandedVideo.path);
 
   useEffect(() => {
     if (!imageExpanded && !videoExpanded) return;
@@ -362,7 +363,7 @@ export function PreviewVisual({
                         aria-pressed={index === expandedImageIndex}
                       >
                         <Image
-                          src={`/api/projects/${project.project.id}/files/content?path=${encodeURIComponent(image.path)}`}
+                          src={projectFileUrl(project.project.id, image.path)}
                           alt=""
                           fill
                           unoptimized
@@ -496,7 +497,7 @@ export function PreviewVisual({
                 </p>
                 <div className="flex shrink-0 justify-center gap-2 overflow-x-auto py-1">
                   {sceneVideos.map((video, index) => {
-                    const videoUrl = `/api/projects/${project.project.id}/files/content?path=${encodeURIComponent(video.path)}`;
+                    const videoUrl = projectFileUrl(project.project.id, video.path);
                     return (
                       <button
                         key={video.path}
