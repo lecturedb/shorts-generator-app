@@ -1,13 +1,31 @@
 import type { NextConfig } from "next";
 
+const isGitHubPagesBuild = process.env.GITHUB_PAGES === "true";
+const [repositoryOwner = "", repositoryName = ""] =
+  process.env.GITHUB_REPOSITORY?.split("/") ?? [];
+const isUserOrOrganizationSite =
+  repositoryName.toLowerCase() === `${repositoryOwner.toLowerCase()}.github.io`;
+const basePath =
+  isGitHubPagesBuild && repositoryName && !isUserOrOrganizationSite
+    ? `/${repositoryName}`
+    : "";
+
 const nextConfig: NextConfig = {
   devIndicators: false,
-  /* config options here */
+  ...(isGitHubPagesBuild
+    ? {
+        output: "export" as const,
+        basePath,
+        trailingSlash: true,
+        images: { unoptimized: true },
+      }
+    : {
+        cacheComponents: true,
+        partialPrefetching: true,
+      }),
   experimental: {
     agentFeedback: false,
   },
-  cacheComponents: true,
-  partialPrefetching: true,
 };
 
 export default nextConfig;
